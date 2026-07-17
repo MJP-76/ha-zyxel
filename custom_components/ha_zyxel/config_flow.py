@@ -37,38 +37,61 @@ DATA_SCHEMA = vol.Schema(
 )
 
 
+def _normalize_host(host: str) -> str:
+    """Return the host without a URL scheme."""
+    if host.startswith("http://"):
+        return host.removeprefix("http://")
+    if host.startswith("https://"):
+        return host.removeprefix("https://")
+    return host
+
+
+def _candidate_hosts(host: str, device_type: str) -> list[str]:
+    """Return connection candidates for the selected device type."""
+    if device_type == "nwa50ax":
+        return [f"http://{host}", f"https://{host}"]
+    if host.startswith("http://") or host.startswith("https://"):
+        return [host]
+    return [f"https://{host}", f"http://{host}"]
+
+
 async def validate_input(hass: core.HomeAssistant, data):
     """Validate that the user input allows us to connect."""
 
     try:
+        host = _normalize_host(data[CONF_HOST])
         device_type = data[CONF_DEVICE_TYPE]
         _LOGGER.debug(
             "Validating Zyxel connection to %s as %s (%s)",
-            data[CONF_HOST],
+            host,
             data[CONF_USERNAME],
             device_type,
         )
-        # Create router instance and test connection
-        router = await hass.async_add_executor_job(
-            nr7101.NR7101,
-            data[CONF_HOST],
-            data[CONF_USERNAME],
-            data[CONF_PASSWORD],
-            {"timeout": 15},
-        )
+        last_error = None
+        for candidate in _candidate_hosts(host, device_type):
+            _LOGGER.debug("Trying Zyxel connection candidate %s", candidate)
+            router = await hass.async_add_executor_job(
+                nr7101.NR7101,
+                candidate,
+                data[CONF_USERNAME],
+                data[CONF_PASSWORD],
+                {"timeout": 15},
+            )
 
-        if device_type == "nwa50ax":
-            _LOGGER.debug("Attempting Zyxel login for %s", data[CONF_HOST])
-            await hass.async_add_executor_job(router.login)
-            _LOGGER.debug("Login succeeded, probing status for %s", data[CONF_HOST])
-            await hass.async_add_executor_job(router.get_status)
+            try:
+                if device_type == "nwa50ax":
+                    await hass.async_add_executor_job(router.login)
+                    await hass.async_add_executor_job(router.get_status)
+                else:
+                    await hass.async_add_executor_job(router.connect)
+                data[CONF_HOST] = host
+                _LOGGER.debug("Zyxel connection validation succeeded for %s", candidate)
+                break
+            except Exception as ex:  # pylint: disable=broad-except
+                last_error = ex
+                _LOGGER.debug("Candidate %s failed", candidate, exc_info=True)
         else:
-            _LOGGER.debug("Attempting legacy Zyxel connectivity check for %s", data[CONF_HOST])
-            await hass.async_add_executor_job(router.connect)
-        _LOGGER.debug("Zyxel connection validation succeeded for %s", data[CONF_HOST])
-
-
-
+            raise last_error if last_error else Exception("Connection failed")
     except Exception as ex:
         _LOGGER.exception("Unable to connect to Zyxel device at %s", data[CONF_HOST])
         raise ConnectionError from ex
@@ -88,13 +111,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         success = False
 
         if user_input is not None:
-            host = user_input[CONF_HOST]
+            host = _normalize_host(user_input[CONF_HOST])
+            user_input[CONF_HOST] = host
 
             # sanitize entry
-            if not host.startswith("http://") and not host.startswith("https://"):
-                host = f"https://{host}"
-                user_input[CONF_HOST] = host
-
             try:
                 info = await validate_input(self.hass, user_input)
                 success = True
@@ -104,19 +124,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
                 errors["base"] = "cannot_connect"
 
-            if not success and "https" not in user_input["host"]:
-                _LOGGER.info("User specified http but it failed, trying https...")
-                user_input["host"] = user_input["host"].replace("http://", "https://")
-                try:
-                    info = await validate_input(self.hass, user_input)
-                    success = True
-                except ConnectionError:
-                    errors["base"] = "cannot_connect"
-                except Exception as e:  # pylint: disable=broad-except
-                    _LOGGER.debug(
-                        "Second attempt failed for %s", user_input[CONF_HOST], exc_info=True
-                    )
-                    errors["base"] = "unknown"
+            if not success:
+                errors["base"] = "cannot_connect"
 
         if success:
             return self.async_create_entry(title=info["title"], data=user_input)

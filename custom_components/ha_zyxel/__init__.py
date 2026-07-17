@@ -77,6 +77,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     username = entry.data[CONF_USERNAME]
     password = entry.data[CONF_PASSWORD]
     device_type = entry.data.get(CONF_DEVICE_TYPE, "legacy")
+    if device_type == "nwa50ax" and not host.startswith(("http://", "https://")):
+        host = f"http://{host}"
 
     try:
         _LOGGER.debug("Creating Zyxel client for %s", host)

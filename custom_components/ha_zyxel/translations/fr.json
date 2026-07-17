@@ -3,9 +3,10 @@
     "step": {
       "user": {
         "data": {
-          "host": "Hôte",
+          "host": "Adresse IP de l'AP",
           "username": "Nom d'utilisateur (habituellement 'admin')",
-          "password": "Mot de passe"
+          "password": "Mot de passe",
+          "device_type": "Type d'appareil"
         }
       }
     },
