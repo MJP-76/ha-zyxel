@@ -1,9 +1,14 @@
 """The Zyxel integration."""
 import asyncio
+import json
 import logging
+import re
+import ast
+from collections.abc import Mapping
 from datetime import timedelta
 
 import async_timeout
+import requests
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
@@ -20,13 +25,125 @@ from custom_components.ha_zyxel.const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-# Block excessive nr7101 debug logging
-nr7101_logger = logging.getLogger("nr7101.nr7101")
-nr7101_logger.setLevel(logging.WARNING)
-
 from nr7101 import nr7101
 
 PLATFORMS = ["sensor", "button"]
+
+
+class NWA50AXClient:
+    """Minimal Zyxel NWA50AX client using the zysh CGI endpoint."""
+
+    def __init__(self, host: str, username: str, password: str, timeout: int = 15) -> None:
+        self.host = host.rstrip("/")
+        self.username = username
+        self.password = password
+        self.timeout = timeout
+        self._session = requests.Session()
+        self._session.headers.update(
+            {
+                "User-Agent": "Mozilla/5.0",
+                "X-Requested-With": "XMLHttpRequest",
+                "Origin": self.host,
+                "Referer": f"{self.host}/",
+            }
+        )
+
+    def login(self) -> None:
+        resp = self._session.post(
+            f"{self.host}/",
+            data={"username": self.username, "pwd": self.password},
+            timeout=self.timeout,
+            allow_redirects=True,
+        )
+        resp.raise_for_status()
+        if "login" in resp.text.lower() and "fail" in resp.text.lower():
+            raise UpdateFailed("Login failed")
+
+    def _post_cmds(self, cmds: list[str]) -> dict:
+        from urllib.parse import quote_plus
+
+        payload = "&".join(["filter=js2"] + [f"cmd={quote_plus(cmd)}" for cmd in cmds] + ["write=0"])
+        resp = self._session.post(
+            f"{self.host}/cgi-bin/zysh-cgi",
+            data=payload,
+            headers={"Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"},
+            timeout=self.timeout,
+        )
+        resp.raise_for_status()
+        return self._parse_zysh_response(resp.text)
+
+    @staticmethod
+    def _parse_zysh_response(text: str) -> dict:
+        result: dict = {}
+        pattern = re.compile(
+            r"var zyshdata(\d+)=\[(.*?)\];\nvar errno\1=(\d+);\nvar errmsg\1='([^']*)';",
+            re.S,
+        )
+        for match in pattern.finditer(text):
+            data_idx = int(match.group(1))
+            raw = match.group(2)
+            parsed = ast.literal_eval("[" + raw + "]")
+            result[f"zyshdata{data_idx}"] = parsed
+        return result
+
+    def get_status(self) -> dict:
+        data = self._post_cmds(
+            [
+                "show language setting",
+                "show users current",
+                "show version",
+                "show hybrid-mode",
+                "show manager vlan",
+                "show wlan all",
+                "show wireless-hal current channel",
+                "show wireless-hal statistic",
+                "show nebula ethernet status",
+                "show nebula internet status",
+                "show nebula cloud status",
+                "show nebula claim status",
+                "show netconf proxy status",
+                "show fqdn",
+                "show mac",
+                "show serial-number",
+                "show netconf status",
+                "show nebula ntp status",
+                "show nebula cloud-gui status",
+            ]
+        )
+        return self._normalize_status(data)
+
+    @staticmethod
+    def _normalize_status(data: Mapping) -> dict:
+        normalized: dict = {}
+        for key, value in data.items():
+            if key.startswith("zyshdata") and isinstance(value, list) and value:
+                item = value[0]
+                if isinstance(item, dict):
+                    normalized[key] = item
+                    for subkey, subvalue in item.items():
+                        if subkey.startswith("_"):
+                            normalized[subkey.lstrip("_")] = subvalue
+                else:
+                    normalized[key] = value
+        return normalized
+
+    def reboot(self) -> None:
+        self._post_cmds(["reboot"])
+
+
+def _flatten_value(value, parent_key: str = "") -> dict:
+    items = {}
+    if isinstance(value, Mapping):
+        for k, v in value.items():
+            key = f"{parent_key}.{k}" if parent_key else str(k)
+            items.update(_flatten_value(v, key))
+    elif isinstance(value, list):
+        for idx, v in enumerate(value):
+            key = f"{parent_key}.{idx}" if parent_key else str(idx)
+            items.update(_flatten_value(v, key))
+    else:
+        items[parent_key] = value
+    return items
 
 
 def _merge_status_data(router) -> dict:
@@ -82,12 +199,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     try:
         _LOGGER.debug("Creating Zyxel client for %s", host)
-        router = await hass.async_add_executor_job(
-            nr7101.NR7101, host, username, password, {"timeout": 15}
-        )
         if device_type == "nwa50ax":
-            _LOGGER.debug("Logging into Zyxel NWA50AX at %s", host)
+            router = NWA50AXClient(host, username, password)
             await hass.async_add_executor_job(router.login)
+        else:
+            router = await hass.async_add_executor_job(
+                nr7101.NR7101, host, username, password, {"timeout": 15}
+            )
     except Exception as ex:
         _LOGGER.exception("Could not create Zyxel client for %s", host)
         raise ConfigEntryNotReady from ex
@@ -97,12 +215,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         try:
             async with async_timeout.timeout(15):
                 def get_all_data():
-                    data = _merge_status_data(router)
+                    data = router.get_status() if device_type == "nwa50ax" else _merge_status_data(router)
 
                     if not data:
-                        legacy_data = router.get_status()
-                        if legacy_data:
-                            data = legacy_data
+                        if device_type != "nwa50ax":
+                            legacy_data = router.get_status()
+                            if legacy_data:
+                                data = legacy_data
 
                     if not data:
                         raise UpdateFailed("No data received from router")

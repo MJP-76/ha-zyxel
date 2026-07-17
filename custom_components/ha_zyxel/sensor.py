@@ -164,6 +164,13 @@ def _flatten_dict(d: dict, parent_key: str = "") -> dict:
         new_key = f"{parent_key}.{k}" if parent_key else k
         if isinstance(v, dict):
             items.extend(_flatten_dict(v, new_key).items())
+        elif isinstance(v, list):
+            for i, item in enumerate(v):
+                list_key = f"{new_key}.{i}"
+                if isinstance(item, dict):
+                    items.extend(_flatten_dict(item, list_key).items())
+                else:
+                    items.append((list_key, item))
         else:
             items.append((new_key, v))
     return dict(items)
