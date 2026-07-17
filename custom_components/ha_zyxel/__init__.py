@@ -28,6 +28,46 @@ from nr7101 import nr7101
 PLATFORMS = ["sensor", "button"]
 
 
+def _merge_status_data(router) -> dict:
+    """Collect the most useful data objects exposed by a Zyxel device."""
+    data = {}
+
+    # Try the generic dashboard OID first; APs expose this while cellular
+    # routers still use the legacy cellular/traffic objects below.
+    status = router.get_json_object("status")
+    if status:
+        data.update(status)
+
+    # Preserve the richer legacy data when the device supports it.
+    try:
+        cellular = router.get_json_object("cellwan_status")
+    except Exception:  # pylint: disable=broad-except
+        cellular = None
+    if cellular:
+        data["cellular"] = cellular
+
+    try:
+        traffic_obj = router.get_json_object("Traffic_Status")
+    except Exception:  # pylint: disable=broad-except
+        traffic_obj = None
+    if traffic_obj and "ipIface" in traffic_obj and "ipIfaceSt" in traffic_obj:
+        traffic = {}
+        for iface, iface_st in zip(traffic_obj["ipIface"], traffic_obj["ipIfaceSt"]):
+            if isinstance(iface, dict) and "X_ZYXEL_IfName" in iface:
+                traffic[iface["X_ZYXEL_IfName"]] = iface_st
+        if traffic:
+            data["traffic"] = traffic
+
+    try:
+        wifi = router.get_json_object("wlan")
+    except Exception:  # pylint: disable=broad-except
+        wifi = None
+    if wifi:
+        data["wifi"] = wifi
+
+    return data
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Zyxel integration from a config entry."""
 
@@ -49,16 +89,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         try:
             async with async_timeout.timeout(15):
                 def get_all_data():
-                    data = router.get_status()
+                    data = _merge_status_data(router)
+
+                    if not data:
+                        legacy_data = router.get_status()
+                        if legacy_data:
+                            data = legacy_data
 
                     if not data:
                         raise UpdateFailed("No data received from router")
-
-                    # Get device info if not already in data
-                    if "device" not in data or not data["device"]:
-                        device_info = router.get_json_object("status")
-                        if device_info:
-                            data["device_info"] = device_info
 
                     return data
 
