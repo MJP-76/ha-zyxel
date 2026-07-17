@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import logging
 import re
 from collections.abc import Mapping
@@ -81,21 +82,32 @@ class NWA50AXClient:
 
     @staticmethod
     def _parse_zysh_response(text: str) -> dict:
+        stripped = text.strip()
+        if stripped.startswith("{") or stripped.startswith("["):
+            try:
+                parsed_json = json.loads(stripped)
+            except json.JSONDecodeError:
+                parsed_json = None
+            else:
+                if isinstance(parsed_json, dict):
+                    return parsed_json
+
         result: dict = {}
         pattern = re.compile(
-            r"var zyshdata(\d+)\s*=\s*\[(.*?)\];\s*var errno\1\s*=\s*(\d+);\s*var errmsg\1\s*=\s*'([^']*)';",
+            r"var\s+([A-Za-z0-9_]+)\s*=\s*\[(.*?)\];\s*var\s+errno\1\s*=\s*(\d+);\s*var\s+errmsg\1\s*=\s*(['\"])(.*?)\4;?",
             re.S,
         )
         for match in pattern.finditer(text):
-            data_idx = int(match.group(1))
+            data_name = match.group(1)
             raw = match.group(2)
             parsed = ast.literal_eval("[" + raw + "]")
             errno = int(match.group(3))
-            errmsg = match.group(4)
+            errmsg = match.group(5)
             if errno != 0:
-                raise UpdateFailed(errmsg or f"zysh-cgi command {data_idx} failed with errno {errno}")
-            result[f"zyshdata{data_idx}"] = parsed
+                raise UpdateFailed(errmsg or f"zysh-cgi command {data_name} failed with errno {errno}")
+            result[data_name] = parsed
         if not result:
+            _LOGGER.debug("Unparsed zysh-cgi response body: %s", text[:2000])
             raise UpdateFailed("zysh-cgi returned no usable data")
         return result
 
@@ -136,7 +148,7 @@ def normalize_zysh_status(data: Mapping) -> dict:
     """Flatten the zysh response into a status dict."""
     normalized: dict = {}
     for key, value in data.items():
-        if key.startswith("zyshdata") and isinstance(value, list) and value:
+        if isinstance(key, str) and isinstance(value, list) and value:
             item = value[0]
             if isinstance(item, dict):
                 normalized[key] = item
