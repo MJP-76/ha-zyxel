@@ -10,6 +10,7 @@ from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from custom_components.ha_zyxel.const import (
+    CONF_DEVICE_TYPE,
     CONF_HOST,
     CONF_PASSWORD,
     CONF_USERNAME,
@@ -75,14 +76,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     host = entry.data[CONF_HOST]
     username = entry.data[CONF_USERNAME]
     password = entry.data[CONF_PASSWORD]
+    device_type = entry.data.get(CONF_DEVICE_TYPE, "legacy")
 
     try:
         _LOGGER.debug("Creating Zyxel client for %s", host)
         router = await hass.async_add_executor_job(
             nr7101.NR7101, host, username, password, {"timeout": 15}
         )
-        _LOGGER.debug("Logging into Zyxel device at %s", host)
-        await hass.async_add_executor_job(router.login)
+        if device_type == "nwa50ax":
+            _LOGGER.debug("Logging into Zyxel NWA50AX at %s", host)
+            await hass.async_add_executor_job(router.login)
     except Exception as ex:
         _LOGGER.exception("Could not create Zyxel client for %s", host)
         raise ConfigEntryNotReady from ex

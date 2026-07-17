@@ -2,11 +2,12 @@
 import logging
 
 import voluptuous as vol
+from homeassistant.helpers.selector import SelectSelector, SelectSelectorConfig, SelectSelectorMode
 
 from homeassistant import config_entries, core, exceptions
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
 
-from .const import DEFAULT_HOST, DEFAULT_USERNAME, DOMAIN
+from .const import DEFAULT_DEVICE_TYPE, DEFAULT_HOST, DEFAULT_USERNAME, DOMAIN, CONF_DEVICE_TYPE
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -18,6 +19,17 @@ from nr7101 import nr7101
 
 DATA_SCHEMA = vol.Schema(
     {
+        vol.Required(
+            CONF_DEVICE_TYPE, default=DEFAULT_DEVICE_TYPE
+        ): SelectSelector(
+            SelectSelectorConfig(
+                options=[
+                    {"value": "nwa50ax", "label": "NWA50AX AP"},
+                    {"value": "legacy", "label": "Legacy Zyxel device"},
+                ],
+                mode=SelectSelectorMode.DROPDOWN,
+            )
+        ),
         vol.Required(CONF_HOST, default=DEFAULT_HOST): str,
         vol.Required(CONF_USERNAME, default=DEFAULT_USERNAME): str,
         vol.Required(CONF_PASSWORD): str,
@@ -29,10 +41,12 @@ async def validate_input(hass: core.HomeAssistant, data):
     """Validate that the user input allows us to connect."""
 
     try:
+        device_type = data[CONF_DEVICE_TYPE]
         _LOGGER.debug(
-            "Validating Zyxel connection to %s as %s",
+            "Validating Zyxel connection to %s as %s (%s)",
             data[CONF_HOST],
             data[CONF_USERNAME],
+            device_type,
         )
         # Create router instance and test connection
         router = await hass.async_add_executor_job(
@@ -43,10 +57,14 @@ async def validate_input(hass: core.HomeAssistant, data):
             {"timeout": 15},
         )
 
-        _LOGGER.debug("Attempting Zyxel login for %s", data[CONF_HOST])
-        await hass.async_add_executor_job(router.login)
-        _LOGGER.debug("Login succeeded, probing status for %s", data[CONF_HOST])
-        await hass.async_add_executor_job(router.get_status)
+        if device_type == "nwa50ax":
+            _LOGGER.debug("Attempting Zyxel login for %s", data[CONF_HOST])
+            await hass.async_add_executor_job(router.login)
+            _LOGGER.debug("Login succeeded, probing status for %s", data[CONF_HOST])
+            await hass.async_add_executor_job(router.get_status)
+        else:
+            _LOGGER.debug("Attempting legacy Zyxel connectivity check for %s", data[CONF_HOST])
+            await hass.async_add_executor_job(router.connect)
         _LOGGER.debug("Zyxel connection validation succeeded for %s", data[CONF_HOST])
 
 
