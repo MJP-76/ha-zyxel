@@ -7,9 +7,11 @@ import re
 from collections.abc import Mapping
 
 import requests
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
 _LOGGER = logging.getLogger(__name__)
+requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
 
 class NWA50AXClient:
@@ -29,6 +31,7 @@ class NWA50AXClient:
                 "Referer": f"{self.host}/",
             }
         )
+        self._session.verify = False
 
     def login(self) -> None:
         self._session = requests.Session()
@@ -40,6 +43,7 @@ class NWA50AXClient:
                 "Referer": f"{self.host}/",
             }
         )
+        self._session.verify = False
         page = self._session.get(f"{self.host}/", timeout=self.timeout)
         page.raise_for_status()
         _LOGGER.debug("NWA50AX login page status=%s url=%s", page.status_code, page.url)
