@@ -22,7 +22,7 @@ nr7101_logger = logging.getLogger("nr7101.nr7101")
 nr7101_logger.setLevel(logging.WARNING)
 
 DEVICE_CHOICES = [
-    {"value": "generic", "label": "Generic Zylex Device"},
+    {"value": "generic", "label": "Generic Zyxel Device"},
     {"value": "ax7501-b0", "label": "AX7501-B0"},
     {"value": "fwa505", "label": "FWA505"},
     {"value": "fwa510", "label": "FWA510"},
