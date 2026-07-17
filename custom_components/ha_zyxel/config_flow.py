@@ -6,6 +6,7 @@ from homeassistant import config_entries, core, exceptions
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers.selector import SelectSelector, SelectSelectorConfig, SelectSelectorMode
+from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from custom_components.ha_zyxel.backend import NWA50AXClient
 from .const import (
@@ -107,8 +108,6 @@ async def _validate_connection(hass: core.HomeAssistant, data):
                 await hass.async_add_executor_job(router.login)
                 status = await hass.async_add_executor_job(router.get_status)
                 if not status:
-                    from homeassistant.helpers.update_coordinator import UpdateFailed
-
                     raise UpdateFailed("zysh-cgi returned an empty status payload")
             else:
                 from nr7101 import nr7101
