@@ -43,7 +43,10 @@ async def validate_input(hass: core.HomeAssistant, data):
             {"timeout": 15},
         )
 
-        await hass.async_add_executor_job(router.connect)
+        _LOGGER.debug("Attempting Zyxel login for %s", data[CONF_HOST])
+        await hass.async_add_executor_job(router.login)
+        _LOGGER.debug("Login succeeded, probing status for %s", data[CONF_HOST])
+        await hass.async_add_executor_job(router.get_status)
         _LOGGER.debug("Zyxel connection validation succeeded for %s", data[CONF_HOST])
 
 

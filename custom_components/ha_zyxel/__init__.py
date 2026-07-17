@@ -81,6 +81,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         router = await hass.async_add_executor_job(
             nr7101.NR7101, host, username, password, {"timeout": 15}
         )
+        _LOGGER.debug("Logging into Zyxel device at %s", host)
+        await hass.async_add_executor_job(router.login)
     except Exception as ex:
         _LOGGER.exception("Could not create Zyxel client for %s", host)
         raise ConfigEntryNotReady from ex
