@@ -21,7 +21,6 @@ nr7101_logger.setLevel(logging.WARNING)
 from nr7101 import nr7101
 
 DEVICE_CHOICES = [
-    {"value": "nwa50ax", "label": "NWA50AX AP"},
     {"value": "ax7501-b0", "label": "AX7501-B0"},
     {"value": "fwa505", "label": "FWA505"},
     {"value": "fwa510", "label": "FWA510"},
@@ -35,6 +34,7 @@ DEVICE_CHOICES = [
     {"value": "nr7101", "label": "NR7101"},
     {"value": "nr7102", "label": "NR7102"},
     {"value": "nr7302", "label": "NR7302"},
+    {"value": "nwa50ax", "label": "NWA50AX AP"},
     {"value": "vmg3625-t50b", "label": "VMG3625-T50B"},
     {"value": "vmg4005-b50a", "label": "VMG4005-B50A"},
     {"value": "vmg8825-t50", "label": "VMG8825-T50"},
@@ -51,7 +51,7 @@ SELECT_SCHEMA = vol.Schema(
 
 NWA50AX_SCHEMA = vol.Schema(
     {
-        vol.Required(CONF_HOST, default=DEFAULT_HOST): str,
+        vol.Required(CONF_HOST): str,
         vol.Required(CONF_USERNAME, default=DEFAULT_USERNAME): str,
         vol.Required(CONF_PASSWORD): str,
     }
