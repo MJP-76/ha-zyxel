@@ -46,8 +46,14 @@ class NWA50AXClient:
         )
         self._session.verify = False
         page = self._session.get(f"{self.host}/", timeout=self.timeout)
-        page.raise_for_status()
-        _LOGGER.debug("NWA50AX login page status=%s url=%s", page.status_code, page.url)
+        _LOGGER.debug(
+            "NWA50AX login page status=%s url=%s body=%s",
+            page.status_code,
+            page.url,
+            page.text[:500],
+        )
+        if page.status_code >= 500:
+            _LOGGER.debug("NWA50AX login page returned %s; continuing to POST login", page.status_code)
         csrf_token = (
             self._session.cookies.get("CSRFToken")
             or self._session.cookies.get("csrftok")
@@ -62,13 +68,14 @@ class NWA50AXClient:
             timeout=self.timeout,
             allow_redirects=True,
         )
-        resp.raise_for_status()
         _LOGGER.debug(
             "NWA50AX login response status=%s url=%s body=%s",
             resp.status_code,
             resp.url,
             resp.text[:500],
         )
+        if resp.status_code >= 500:
+            _LOGGER.debug("NWA50AX login POST returned %s; checking body/cookies instead of failing hard", resp.status_code)
         if "login" in resp.text.lower() and "fail" in resp.text.lower():
             raise UpdateFailed("Login failed")
         if "invalid" in resp.text.lower() and "password" in resp.text.lower():
