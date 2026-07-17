@@ -78,7 +78,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     try:
         router = await hass.async_add_executor_job(
-            nr7101.NR7101, host, username, password
+            nr7101.NR7101, host, username, password, {"timeout": 15}
         )
     except Exception as ex:
         _LOGGER.error("Could not connect to Zyxel router: %s", ex)

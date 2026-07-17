@@ -34,18 +34,11 @@ async def validate_input(hass: core.HomeAssistant, data):
             nr7101.NR7101,
             data[CONF_HOST],
             data[CONF_USERNAME],
-            data[CONF_PASSWORD]
+            data[CONF_PASSWORD],
+            {"timeout": 15},
         )
 
-        def can_read_data():
-            try:
-                return router.get_json_object("status")
-            except Exception:  # pylint: disable=broad-except
-                return router.get_status()
-
-        login_success = await hass.async_add_executor_job(can_read_data)
-        if not login_success:
-            raise Exception("Login failed - check credentials")
+        await hass.async_add_executor_job(router.connect)
 
 
 
