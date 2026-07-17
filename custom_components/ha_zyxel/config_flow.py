@@ -3,7 +3,7 @@ import logging
 
 import voluptuous as vol
 from homeassistant import config_entries, core, exceptions
-from homeassistant.exceptions import ConfigEntryAuthFailed, UpdateFailed
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers.selector import SelectSelector, SelectSelectorConfig, SelectSelectorMode
 
@@ -19,8 +19,6 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 nr7101_logger = logging.getLogger("nr7101.nr7101")
 nr7101_logger.setLevel(logging.WARNING)
-
-from nr7101 import nr7101
 
 DEVICE_CHOICES = [
     {"value": "generic", "label": "Generic Zylex Device"},
@@ -109,8 +107,12 @@ async def _validate_connection(hass: core.HomeAssistant, data):
                 await hass.async_add_executor_job(router.login)
                 status = await hass.async_add_executor_job(router.get_status)
                 if not status:
+                    from homeassistant.helpers.update_coordinator import UpdateFailed
+
                     raise UpdateFailed("zysh-cgi returned an empty status payload")
             else:
+                from nr7101 import nr7101
+
                 router = await hass.async_add_executor_job(
                     nr7101.NR7101,
                     candidate,
