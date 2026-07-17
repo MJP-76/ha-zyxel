@@ -91,7 +91,7 @@ async def _validate_connection(hass: core.HomeAssistant, data):
     device_type = data[CONF_DEVICE_TYPE]
     host = _normalize_host(data[CONF_HOST])
 
-    _LOGGER.debug(
+    _LOGGER.warning(
         "Validating Zyxel connection to %s as %s (%s)",
         host,
         data[CONF_USERNAME],
@@ -100,7 +100,7 @@ async def _validate_connection(hass: core.HomeAssistant, data):
 
     last_error = None
     for candidate in _try_candidates(host, device_type):
-        _LOGGER.debug("Trying Zyxel connection candidate %s", candidate)
+        _LOGGER.warning("Trying Zyxel connection candidate %s", candidate)
         router = await hass.async_add_executor_job(
             nr7101.NR7101,
             candidate,
