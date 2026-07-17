@@ -21,6 +21,7 @@ nr7101_logger.setLevel(logging.WARNING)
 from nr7101 import nr7101
 
 DEVICE_CHOICES = [
+    {"value": "generic", "label": "Generic Zylex Device"},
     {"value": "ax7501-b0", "label": "AX7501-B0"},
     {"value": "fwa505", "label": "FWA505"},
     {"value": "fwa510", "label": "FWA510"},
@@ -38,7 +39,6 @@ DEVICE_CHOICES = [
     {"value": "vmg3625-t50b", "label": "VMG3625-T50B"},
     {"value": "vmg4005-b50a", "label": "VMG4005-B50A"},
     {"value": "vmg8825-t50", "label": "VMG8825-T50"},
-    {"value": "untested", "label": "Untested Zyxel Device"},
 ]
 
 SELECT_SCHEMA = vol.Schema(

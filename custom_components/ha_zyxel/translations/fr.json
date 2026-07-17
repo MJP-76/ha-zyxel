@@ -8,7 +8,7 @@
       },
       "nwa50ax": {
         "data": {
-          "host": "Hôte",
+          "host": "Adresse IP",
           "username": "Nom d'utilisateur (habituellement 'admin')",
           "password": "Mot de passe"
         }
