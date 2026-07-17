@@ -77,11 +77,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     password = entry.data[CONF_PASSWORD]
 
     try:
+        _LOGGER.debug("Creating Zyxel client for %s", host)
         router = await hass.async_add_executor_job(
             nr7101.NR7101, host, username, password, {"timeout": 15}
         )
     except Exception as ex:
-        _LOGGER.error("Could not connect to Zyxel router: %s", ex)
+        _LOGGER.exception("Could not create Zyxel client for %s", host)
         raise ConfigEntryNotReady from ex
 
     async def async_update_data():
@@ -107,6 +108,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             raise UpdateFailed("Router data fetch timed out")
         except Exception as err:
             router._session_valid = False
+            _LOGGER.exception("Error communicating with Zyxel device at %s", host)
             raise UpdateFailed(f"Error communicating with router: {err}") from err
 
     coordinator = DataUpdateCoordinator(

@@ -29,6 +29,11 @@ async def validate_input(hass: core.HomeAssistant, data):
     """Validate that the user input allows us to connect."""
 
     try:
+        _LOGGER.debug(
+            "Validating Zyxel connection to %s as %s",
+            data[CONF_HOST],
+            data[CONF_USERNAME],
+        )
         # Create router instance and test connection
         router = await hass.async_add_executor_job(
             nr7101.NR7101,
@@ -39,11 +44,12 @@ async def validate_input(hass: core.HomeAssistant, data):
         )
 
         await hass.async_add_executor_job(router.connect)
+        _LOGGER.debug("Zyxel connection validation succeeded for %s", data[CONF_HOST])
 
 
 
     except Exception as ex:
-        _LOGGER.error("Unable to connect to Zyxel device: %s", ex)
+        _LOGGER.exception("Unable to connect to Zyxel device at %s", data[CONF_HOST])
         raise ConnectionError from ex
 
     return {"title": f"Zyxel device: ({data[CONF_HOST]})"}
@@ -72,7 +78,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 info = await validate_input(self.hass, user_input)
                 success = True
             except Exception as e:  # pylint: disable=broad-except
-                _LOGGER.exception("First attempt failed", e)
+                _LOGGER.debug(
+                    "First attempt failed for %s", user_input[CONF_HOST], exc_info=True
+                )
                 errors["base"] = "cannot_connect"
 
             if not success and "https" not in user_input["host"]:
@@ -84,7 +92,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 except ConnectionError:
                     errors["base"] = "cannot_connect"
                 except Exception as e:  # pylint: disable=broad-except
-                    _LOGGER.exception("Second attempt failed", e)
+                    _LOGGER.debug(
+                        "Second attempt failed for %s", user_input[CONF_HOST], exc_info=True
+                    )
                     errors["base"] = "unknown"
 
         if success:
