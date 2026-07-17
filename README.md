@@ -6,19 +6,35 @@
 > 
 > If you are interested, get in touch!
 
-__Home Assistant integration for the Zyxel NWA50AX access point__
+__Home Assistant integration for Zyxel devices__
 
 <img src="https://raw.githubusercontent.com/zulufoxtrot/ha-zyxel/refs/heads/main/resources/screenshot.png" alt="Zyxel Logo" />
 
 [![Open ha-zyxel on Home Assistant Community Store (HACS)](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=zulufoxtrot&repository=ha-zyxel&category=integration)
 
-## Supported device
+## Supported devices
 
 Confirmed working on:
 
-- NWA50AX
+- AX7501-B0
+- FWA505
+- FWA510
+- FWA710 5G V2
+- LTE3202-M437
+- LTE7490-M904
+- LTE5398-M904
+- NR5103E
+- NR5103v2
+- NR5307
+- NR7101
+- NR7102
+- NR7302
+- VMG3625-T50B
+- VMG4005-B50A
+- VMG8825-T50
 
-This fork is focused on the NWA50AX access point only.
+Potentially compatible with a lot more devices.
+If you do test and find out your device is working, please submit an issue or a pull request and I'll add it to the list.
 
 ## Installation
 
@@ -48,7 +64,7 @@ Prerequisites:
 2. Click Add Integration.
 3. Search for Zyxel.
 4. Select the Zyxel integration.
-5. In Host, type your hostname IP, usually something like `https://192.168.1.1` (⚠️ enter the full URL scheme with `https://`)
+5. In Host, type your hostname IP, usually something like https://192.168.1.1 (⚠️ enter the full URL scheme with `https://`)
 6. Type your admin username and password
 7. Click Submit.
 
@@ -64,7 +80,7 @@ Note: the Mushroom card extension is required for the above code to work.
 
 ## Available entities
 
-Entities are generated dynamically from the NWA50AX response data and may vary with firmware and configuration.
+In theory, all items listed [here](https://github.com/pkorpine/nr7101?tab=readme-ov-file#example-output) should be available as entities. The entities are generated dynamically, meaning they can vary from one device to another. They depend on what the device lets us see.
 
 ## Support
 
