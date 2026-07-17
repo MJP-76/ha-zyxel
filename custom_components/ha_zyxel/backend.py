@@ -83,6 +83,9 @@ class NWA50AXClient:
     @staticmethod
     def _parse_zysh_response(text: str) -> dict:
         stripped = text.strip()
+        lowered = stripped.lower()
+        if "login" in lowered and ("password" in lowered or "invalid" in lowered):
+            raise UpdateFailed("Login failed")
         if stripped.startswith("{") or stripped.startswith("["):
             try:
                 parsed_json = json.loads(stripped)
@@ -107,8 +110,19 @@ class NWA50AXClient:
                 raise UpdateFailed(errmsg or f"zysh-cgi command {data_name} failed with errno {errno}")
             result[data_name] = parsed
         if not result:
+            var_pattern = re.compile(r"var\s+([A-Za-z0-9_]+)\s*=\s*(\[[^\n;]*\]|'[^']*'|\"[^\"]*\"|\d+)\s*;")
+            for match in var_pattern.finditer(text):
+                name = match.group(1)
+                value = match.group(2)
+                if not name.startswith("zyshdata"):
+                    continue
+                try:
+                    result[name] = ast.literal_eval(value)
+                except (SyntaxError, ValueError):
+                    continue
+        if not result:
             _LOGGER.debug("Unparsed zysh-cgi response body: %s", text[:2000])
-            raise UpdateFailed("zysh-cgi returned no usable data")
+            raise UpdateFailed(f"zysh-cgi returned no usable data: {text[:120]}")
         return result
 
     def get_status(self) -> dict:
