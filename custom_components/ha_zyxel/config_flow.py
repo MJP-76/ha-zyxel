@@ -74,6 +74,11 @@ def _normalize_host(host: str) -> str:
     return host
 
 
+def _safe_error_message(err: Exception) -> str:
+    message = str(err).strip()
+    return message or err.__class__.__name__
+
+
 def _try_candidates(host: str, device_type: str) -> list[str]:
     if device_type == "nwa50ax":
         return [f"http://{host}", f"https://{host}"]
@@ -113,7 +118,7 @@ async def _validate_connection(hass: core.HomeAssistant, data):
             return {"title": f"Zyxel device: ({data[CONF_HOST]})"}
         except Exception as ex:  # pylint: disable=broad-except
             last_error = ex
-            _LOGGER.debug("Candidate %s failed", candidate, exc_info=True)
+            _LOGGER.warning("Candidate %s failed: %s", candidate, _safe_error_message(ex), exc_info=True)
 
     raise last_error if last_error else Exception("Connection failed")
 
@@ -143,7 +148,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 info = await _validate_connection(self.hass, data)
                 return self.async_create_entry(title=info["title"], data=data)
             except Exception:  # pylint: disable=broad-except
-                _LOGGER.debug("NWA50AX validation failed for %s", user_input[CONF_HOST], exc_info=True)
+                _LOGGER.exception("NWA50AX validation failed for %s", user_input[CONF_HOST])
                 errors["base"] = "cannot_connect"
         return self.async_show_form(step_id="nwa50ax", data_schema=NWA50AX_SCHEMA, errors=errors)
 
@@ -160,7 +165,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 info = await _validate_connection(self.hass, data)
                 return self.async_create_entry(title=info["title"], data=data)
             except Exception:  # pylint: disable=broad-except
-                _LOGGER.debug("Legacy validation failed for %s", user_input[CONF_HOST], exc_info=True)
+                _LOGGER.exception("Legacy validation failed for %s", user_input[CONF_HOST])
                 errors["base"] = "cannot_connect"
         return self.async_show_form(step_id="legacy", data_schema=LEGACY_SCHEMA, errors=errors)
 
