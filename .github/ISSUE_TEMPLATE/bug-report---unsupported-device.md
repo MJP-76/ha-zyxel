@@ -8,7 +8,7 @@ assignees: ''
 ---
 
 **Zyxel device model**
-Example: NR7101
+Example: NWA50AX
 
 **Integration version**
 Example: 2.0.2
