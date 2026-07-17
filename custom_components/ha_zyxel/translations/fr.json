@@ -3,10 +3,21 @@
     "step": {
       "user": {
         "data": {
-          "host": "Adresse IP de l'AP",
-          "username": "Nom d'utilisateur (habituellement 'admin')",
-          "password": "Mot de passe",
           "device_type": "Type d'appareil"
+        }
+      },
+      "nwa50ax": {
+        "data": {
+          "host": "Hôte",
+          "username": "Nom d'utilisateur (habituellement 'admin')",
+          "password": "Mot de passe"
+        }
+      },
+      "legacy": {
+        "data": {
+          "host": "Hôte",
+          "username": "Nom d'utilisateur (habituellement 'admin')",
+          "password": "Mot de passe"
         }
       }
     },
