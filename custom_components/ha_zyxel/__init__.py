@@ -60,6 +60,7 @@ class NWA50AXClient:
         )
         page = self._session.get(f"{self.host}/", timeout=self.timeout)
         page.raise_for_status()
+        _LOGGER.debug("NWA50AX login page status=%s url=%s", page.status_code, page.url)
         resp = self._session.post(
             f"{self.host}/",
             data={"username": self.username, "pwd": self.password},
@@ -67,6 +68,12 @@ class NWA50AXClient:
             allow_redirects=True,
         )
         resp.raise_for_status()
+        _LOGGER.debug(
+            "NWA50AX login response status=%s url=%s body=%s",
+            resp.status_code,
+            resp.url,
+            resp.text[:500],
+        )
         if "login" in resp.text.lower() and "fail" in resp.text.lower():
             raise UpdateFailed("Login failed")
 
@@ -81,6 +88,7 @@ class NWA50AXClient:
             timeout=self.timeout,
         )
         resp.raise_for_status()
+        _LOGGER.debug("NWA50AX cmd response for %s: %s", cmds[0], resp.text[:500])
         return self._parse_zysh_response(resp.text)
 
     @staticmethod
