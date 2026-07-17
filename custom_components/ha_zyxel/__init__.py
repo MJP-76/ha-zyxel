@@ -49,6 +49,17 @@ class NWA50AXClient:
         )
 
     def login(self) -> None:
+        self._session = requests.Session()
+        self._session.headers.update(
+            {
+                "User-Agent": "Mozilla/5.0",
+                "X-Requested-With": "XMLHttpRequest",
+                "Origin": self.host,
+                "Referer": f"{self.host}/",
+            }
+        )
+        page = self._session.get(f"{self.host}/", timeout=self.timeout)
+        page.raise_for_status()
         resp = self._session.post(
             f"{self.host}/",
             data={"username": self.username, "pwd": self.password},
