@@ -48,9 +48,17 @@ class NWA50AXClient:
         page = self._session.get(f"{self.host}/", timeout=self.timeout)
         page.raise_for_status()
         _LOGGER.debug("NWA50AX login page status=%s url=%s", page.status_code, page.url)
+        csrf_token = (
+            self._session.cookies.get("CSRFToken")
+            or self._session.cookies.get("csrftok")
+            or self._session.cookies.get("csrf")
+        )
+        payload = {"username": self.username, "pwd": self.password}
+        if csrf_token:
+            payload["CSRFToken"] = csrf_token
         resp = self._session.post(
             f"{self.host}/",
-            data={"username": self.username, "pwd": self.password},
+            data=payload,
             timeout=self.timeout,
             allow_redirects=True,
         )
@@ -65,6 +73,12 @@ class NWA50AXClient:
             raise UpdateFailed("Login failed")
         if "invalid" in resp.text.lower() and "password" in resp.text.lower():
             raise UpdateFailed("Login failed")
+        if not (
+            self._session.cookies.get("authtok")
+            or self._session.cookies.get("authtoken")
+            or self._session.cookies.get("auth")
+        ):
+            _LOGGER.debug("NWA50AX login cookies after POST: %s", self._session.cookies.get_dict())
 
     def _post_cmds(self, cmds: list[str]) -> dict:
         from urllib.parse import quote_plus
