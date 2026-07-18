@@ -109,6 +109,7 @@ async def _validate_connection(hass: core.HomeAssistant, data):
                 status = await hass.async_add_executor_job(router.get_status)
                 if not status:
                     raise UpdateFailed("zysh-cgi returned an empty status payload")
+                device_name = await hass.async_add_executor_job(router.get_device_name, status)
             else:
                 from nr7101 import nr7101
 
@@ -120,9 +121,11 @@ async def _validate_connection(hass: core.HomeAssistant, data):
                     {"timeout": 15},
                 )
                 await hass.async_add_executor_job(router.connect)
+                device_name = None
 
             data[CONF_HOST] = host if device_type == "nwa50ax" else candidate
-            return {"title": f"Zyxel device: ({data[CONF_HOST]})"}
+            title = device_name or f"Zyxel device: ({data[CONF_HOST]})"
+            return {"title": title}
         except UpdateFailed as ex:
             last_error = ex
             _LOGGER.warning(

@@ -199,6 +199,31 @@ class NWA50AXClient:
             raise UpdateFailed("zysh-cgi returned an empty status payload")
         return normalized
 
+    @staticmethod
+    def get_device_name(status: Mapping) -> str | None:
+        """Return the best device name we can find in zysh status data."""
+        candidates = (
+            "fqdn",
+            "_fqdn",
+            "hostname",
+            "_hostname",
+            "system_name",
+            "_system_name",
+            "device_name",
+            "_device_name",
+        )
+        for key in candidates:
+            value = status.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+
+        for value in status.values():
+            if isinstance(value, Mapping):
+                nested = NWA50AXClient.get_device_name(value)
+                if nested:
+                    return nested
+        return None
+
     def reboot(self) -> None:
         self._post_cmds(["reboot"])
 
