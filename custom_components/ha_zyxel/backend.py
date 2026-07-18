@@ -186,7 +186,7 @@ class NWA50AXClient:
     @staticmethod
     def get_device_name(status: Mapping) -> str | None:
         """Return the best device name we can find in zysh status data."""
-        def _search(node: Mapping | list | str | object) -> str | None:
+        def _search(node: Mapping | list | str | object, preferred: tuple[str, ...]) -> str | None:
             if isinstance(node, str):
                 candidate = node.strip()
                 if not candidate:
@@ -200,20 +200,25 @@ class NWA50AXClient:
             if isinstance(node, Mapping):
                 for key, value in node.items():
                     key_lower = key.lower() if isinstance(key, str) else ""
-                    if any(token in key_lower for token in ("fqdn", "hostname", "system_name", "device_name")):
+                    if any(token in key_lower for token in preferred):
                         if isinstance(value, str) and value.strip():
-                            return value.strip()
-                    nested = _search(value)
+                            candidate = value.strip()
+                            if not _IP_LIKE_RE.match(candidate) and not candidate.lower().startswith(("http://", "https://")):
+                                return candidate
+                    nested = _search(value, preferred)
                     if nested:
                         return nested
             if isinstance(node, list):
                 for item in node:
-                    nested = _search(item)
+                    nested = _search(item, preferred)
                     if nested:
                         return nested
             return None
 
-        name = _search(status)
+        name = _search(status, ("fqdn",))
+        if name:
+            return name
+        name = _search(status, ("hostname", "system_name", "device_name"))
         if name:
             return name
         return None
