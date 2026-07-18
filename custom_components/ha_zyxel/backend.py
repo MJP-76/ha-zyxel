@@ -225,6 +225,48 @@ class NWA50AXClient:
             return name
         return None
 
+    @staticmethod
+    def get_device_model(status: Mapping) -> str | None:
+        """Return the best model name we can find in zysh status data."""
+        def _clean_candidate(value: object) -> str | None:
+            if not isinstance(value, str):
+                return None
+            candidate = value.strip()
+            if not candidate:
+                return None
+            lowered = candidate.lower()
+            if lowered.startswith(("http://", "https://")):
+                return None
+            if _IP_LIKE_RE.match(candidate):
+                return None
+            return candidate
+
+        def _search(node: Mapping | list | object, preferred: tuple[str, ...]) -> str | None:
+            if isinstance(node, Mapping):
+                for key, value in node.items():
+                    key_lower = key.lower() if isinstance(key, str) else ""
+                    if any(token in key_lower for token in preferred):
+                        candidate = _clean_candidate(value)
+                        if candidate:
+                            return candidate
+                    nested = _search(value, preferred)
+                    if nested:
+                        return nested
+            elif isinstance(node, list):
+                for item in node:
+                    nested = _search(item, preferred)
+                    if nested:
+                        return nested
+            return None
+
+        model = _search(status, ("model name", "model_name"))
+        if model:
+            return model
+        model = _search(status, ("model",))
+        if model:
+            return model
+        return None
+
     def reboot(self) -> None:
         self._post_cmds(["reboot"])
 

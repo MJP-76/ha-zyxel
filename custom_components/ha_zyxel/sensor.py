@@ -241,7 +241,7 @@ class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
             identifiers={(DOMAIN, entry.entry_id)},
             name=entry.title,
             manufacturer="Zyxel",
-            model="NWA50AX" if entry.data.get("device_type") == "nwa50ax" else "Zyxel",
+            model=entry.data.get("model") or "Zyxel",
         )
 
     @property
