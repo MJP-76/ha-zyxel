@@ -310,6 +310,21 @@ class EX3301T0Client:
             "iv": iv,
         }
 
+    def _post_login(self, login_payload: dict[str, str], json_body: bool = False) -> requests.Response:
+        if json_body:
+            return self._session.post(
+                f"{self.host}/UserLogin",
+                json=login_payload,
+                timeout=self.timeout,
+                allow_redirects=False,
+            )
+        return self._session.post(
+            f"{self.host}/UserLogin",
+            data=login_payload,
+            timeout=self.timeout,
+            allow_redirects=False,
+        )
+
     def login(self) -> None:
         self._session = requests.Session()
         self._session.headers.update(
@@ -337,13 +352,12 @@ class EX3301T0Client:
         key_data = self._safe_json(key_resp, "EX3301-T0 RSA key request")
         public_key = key_data["RSAPublicKey"]
         login_payload = self._encrypt_login_payload(public_key)
-        resp = self._session.post(
-            f"{self.host}/UserLogin",
-            data=json.dumps(login_payload),
-            timeout=self.timeout,
-            allow_redirects=False,
-        )
+        resp = self._post_login(login_payload, json_body=False)
         _LOGGER.debug("EX3301-T0 login status=%s url=%s", resp.status_code, resp.url)
+        if resp.status_code == 401 and "Decrypt Fail" in resp.text:
+            _LOGGER.debug("EX3301-T0 login decrypt failed with form payload; retrying as JSON")
+            resp = self._post_login(login_payload, json_body=True)
+            _LOGGER.debug("EX3301-T0 login retry status=%s url=%s", resp.status_code, resp.url)
         if resp.status_code in (301, 302, 303, 307, 308):
             location = resp.headers.get("Location", "")
             _LOGGER.debug("EX3301-T0 login redirected to %s", location)
