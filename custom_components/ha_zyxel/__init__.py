@@ -34,6 +34,7 @@ ZyXEL_DASHBOARDS_STORAGE_KEY = "lovelace_dashboards"
 ZyXEL_DASHBOARD_URL_PATH = "zyxel-devices"
 ZYXEL_ENTITY_PREFIXES = ("sensor.", "button.")
 ZYXEL_DASHBOARD_REFRESH_LISTENER = "_zyxel_dashboard_refresh_listener"
+ZYXEL_DASHBOARD_PANEL_REGISTERED = "_zyxel_dashboard_panel_registered"
 
 
 def _zyxel_dashboard_config(device_cards: list[dict[str, object]]) -> dict:
@@ -122,23 +123,25 @@ async def _ensure_zyxel_dashboard(hass: HomeAssistant, _entity_rows: list[str]) 
 
     dashboard_store = Store[dict[str, object]](hass, 1, ZyXEL_DASHBOARD_STORAGE_KEY)
     await dashboard_store.async_save(_zyxel_dashboard_config(_dashboard_device_cards(hass)))
-    frontend.async_register_built_in_panel(
-        hass,
-        "lovelace",
-        frontend_url_path=ZyXEL_DASHBOARD_URL_PATH,
-        require_admin=False,
-        show_in_sidebar=True,
-        sidebar_title="Zyxel Devices",
-        sidebar_icon="mdi:cloud",
-        config={"mode": "storage"},
-        update=False,
-    )
+    if not hass.data.get(ZYXEL_DASHBOARD_PANEL_REGISTERED):
+        frontend.async_register_built_in_panel(
+            hass,
+            "lovelace",
+            frontend_url_path=ZyXEL_DASHBOARD_URL_PATH,
+            require_admin=False,
+            show_in_sidebar=True,
+            sidebar_title="Zyxel Devices",
+            sidebar_icon="mdi:cloud",
+            config={"mode": "storage"},
+            update=False,
+        )
+        hass.data[ZYXEL_DASHBOARD_PANEL_REGISTERED] = True
 
 
 @callback
 def _schedule_dashboard_refresh(hass: HomeAssistant) -> None:
     """Refresh the shared Zyxel dashboard asynchronously."""
-    hass.async_create_task(_refresh_zyxel_dashboard(hass))
+    hass.add_job(_refresh_zyxel_dashboard, hass)
 
 
 def _dashboard_entity_entries(hass: HomeAssistant) -> list[str]:
