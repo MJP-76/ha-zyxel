@@ -7,7 +7,6 @@ import logging
 import re
 from base64 import b64decode, b64encode
 from collections.abc import Mapping
-from hashlib import sha512
 from secrets import token_bytes
 
 import requests
@@ -262,59 +261,57 @@ class EX3301T0Client:
             }
         )
         self._session.verify = False
-        self._aes_key: str | None = None
+        self._aes_key: bytes | None = None
         self._csrf_token: str | None = None
 
     @staticmethod
-    def _aes_encrypt(plaintext: str, key_b64: str, iv_b64: str) -> str:
-        key = b64decode(key_b64)
-        iv = b64decode(iv_b64)
+    def _aes_encrypt(plaintext: str, key: bytes, iv: bytes) -> str:
         padder = padding.PKCS7(128).padder()
         padded = padder.update(plaintext.encode("utf-8")) + padder.finalize()
-        cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
+        cipher = Cipher(algorithms.AES(key), modes.CBC(iv[:16]))
         encryptor = cipher.encryptor()
         ciphertext = encryptor.update(padded) + encryptor.finalize()
         return b64encode(ciphertext).decode("ascii")
 
     @staticmethod
-    def _aes_decrypt(ciphertext_b64: str, key_b64: str, iv_b64: str) -> str:
-        key = b64decode(key_b64)
+    def _aes_decrypt(ciphertext_b64: str, key: bytes, iv_b64: str) -> str:
         iv = b64decode(iv_b64)
-        cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
+        cipher = Cipher(algorithms.AES(key), modes.CBC(iv[:16]))
         decryptor = cipher.decryptor()
         plaintext = decryptor.update(b64decode(ciphertext_b64)) + decryptor.finalize()
         unpadder = padding.PKCS7(128).unpadder()
         return (unpadder.update(plaintext) + unpadder.finalize()).decode("utf-8")
 
     def _encrypt_login_payload(self, public_key_pem: str) -> dict[str, str]:
-        aes_key = b64encode(token_bytes(32)).decode("ascii")
-        iv = b64encode(token_bytes(16)).decode("ascii")
-        self._aes_key = aes_key
+        aes_key_raw = token_bytes(32)
+        aes_key_b64 = b64encode(aes_key_raw).decode("ascii")
+        iv_raw = token_bytes(32)
+        iv_b64 = b64encode(iv_raw).decode("ascii")
+        self._aes_key = aes_key_raw
         payload = {
             "Input_Account": self.username,
             "Input_Passwd": b64encode(self.password.encode("utf-8")).decode("ascii"),
-            "Input_RandomCode": "",
             "currLang": "en",
             "RememberPassword": 0,
-            "SHA512_password": sha512(self.password.encode("utf-8")).hexdigest(),
+            "SHA512_password": False,
         }
-        encrypted = self._aes_encrypt(json.dumps(payload, separators=(",", ":")), aes_key, iv)
+        encrypted = self._aes_encrypt(json.dumps(payload, separators=(",", ":")), aes_key_raw, iv_raw)
         public_key = load_pem_public_key(public_key_pem.encode("utf-8"))
         encrypted_key = public_key.encrypt(
-            b64decode(aes_key),
+            aes_key_b64.encode("utf-8"),
             asym_padding.PKCS1v15(),
         )
         return {
             "content": encrypted,
             "key": b64encode(encrypted_key).decode("ascii"),
-            "iv": iv,
+            "iv": iv_b64,
         }
 
-    def _post_login(self, login_payload: dict[str, str], json_body: bool = False) -> requests.Response:
-        if json_body:
+    def _post_login(self, login_payload: dict[str, str], raw_json_string: bool = False) -> requests.Response:
+        if raw_json_string:
             return self._session.post(
                 f"{self.host}/UserLogin",
-                json=login_payload,
+                data=json.dumps(login_payload),
                 timeout=self.timeout,
                 allow_redirects=False,
             )
@@ -352,11 +349,11 @@ class EX3301T0Client:
         key_data = self._safe_json(key_resp, "EX3301-T0 RSA key request")
         public_key = key_data["RSAPublicKey"]
         login_payload = self._encrypt_login_payload(public_key)
-        resp = self._post_login(login_payload, json_body=False)
+        resp = self._post_login(login_payload, raw_json_string=True)
         _LOGGER.debug("EX3301-T0 login status=%s url=%s", resp.status_code, resp.url)
         if resp.status_code == 401 and "Decrypt Fail" in resp.text:
-            _LOGGER.debug("EX3301-T0 login decrypt failed with form payload; retrying as JSON")
-            resp = self._post_login(login_payload, json_body=True)
+            _LOGGER.debug("EX3301-T0 login decrypt failed with raw JSON payload; retrying as form")
+            resp = self._post_login(login_payload, raw_json_string=False)
             _LOGGER.debug("EX3301-T0 login retry status=%s url=%s", resp.status_code, resp.url)
         if resp.status_code in (301, 302, 303, 307, 308):
             location = resp.headers.get("Location", "")
@@ -368,7 +365,9 @@ class EX3301T0Client:
             raise UpdateFailed(f"EX3301-T0 login returned {resp.status_code}: {snippet}")
         body = self._safe_json(resp, "EX3301-T0 login")
         if "content" in body and "iv" in body:
-            decrypted = self._aes_decrypt(body["content"], self._aes_key or "", body["iv"])
+            if not self._aes_key:
+                raise UpdateFailed("EX3301-T0 missing AES session key")
+            decrypted = self._aes_decrypt(body["content"], self._aes_key, body["iv"])
             data = json.loads(decrypted)
         else:
             data = body
