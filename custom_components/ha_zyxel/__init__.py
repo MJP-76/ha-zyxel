@@ -35,6 +35,7 @@ ZyXEL_DASHBOARD_URL_PATH = "zyxel-devices"
 ZYXEL_ENTITY_PREFIXES = ("sensor.", "button.")
 ZYXEL_DASHBOARD_REFRESH_LISTENER = "_zyxel_dashboard_refresh_listener"
 ZYXEL_DASHBOARD_PANEL_REGISTERED = "_zyxel_dashboard_panel_registered"
+ZYXEL_VERSION = "0.2.7"
 
 
 def _zyxel_dashboard_config(device_cards: list[dict[str, object]]) -> dict:
@@ -49,6 +50,21 @@ def _zyxel_dashboard_config(device_cards: list[dict[str, object]]) -> dict:
                     "theme": "Backend-selected",
                     "type": "sections",
                     "sections": [
+                        {
+                            "type": "grid",
+                            "cards": [
+                                {
+                                    "type": "markdown",
+                                    "content": (
+                                        "<div style='text-align:center'>"
+                                        "<img src='https://raw.githubusercontent.com/zulufoxtrot/ha-zyxel/refs/heads/main/resources/logo.png' "
+                                        "alt='Zyxel' width='96'/>"
+                                        f"<h2>Zyxel Devices</h2><p>ha-zyxel v{ZYXEL_VERSION}</p>"
+                                        "</div>"
+                                    ),
+                                }
+                            ],
+                        },
                         *device_cards,
                     ],
                 }
