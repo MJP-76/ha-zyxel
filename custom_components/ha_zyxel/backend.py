@@ -345,11 +345,20 @@ class EX3301T0Client:
             data = json.loads(decrypted)
         else:
             data = body
-        session_key = data.get("sessionkey") or data.get("sessionKey")
+        session_key = (
+            data.get("sessionkey")
+            or data.get("sessionKey")
+            or resp.cookies.get("zySessionKey")
+            or resp.cookies.get("sessionkey")
+            or resp.cookies.get("sessionKey")
+            or self._session.cookies.get("zySessionKey")
+        )
         if session_key:
             self._csrf_token = session_key
             self._session.headers.update({"CSRFToken": session_key})
-        self._session.cookies.set("zySessionKey", session_key or "", path="/")
+            self._session.cookies.set("zySessionKey", session_key, path="/")
+        if not session_key and not any(k in data for k in ("loginAccount", "loginLevel", "quickStart", "ThemeColor")):
+            raise UpdateFailed("Login session not established")
         self._probe("UserLoginCheck")
 
     def _request(self, endpoint: str, method: str = "get") -> requests.Response:
