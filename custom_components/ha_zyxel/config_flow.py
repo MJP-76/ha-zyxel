@@ -23,8 +23,11 @@ nr7101_logger = logging.getLogger("nr7101.nr7101")
 nr7101_logger.setLevel(logging.WARNING)
 
 DEVICE_CHOICES = [
-    {"value": "legacy", "label": "Locally Managed"},
-    {"value": "nwa50ax", "label": "Cloud Managed"},
+    {
+        "value": "legacy",
+        "label": "Locally Managed — AX7501-B0, FWA505, FWA510, FWA710 5G V2, LTE3202-M437, LTE7490-M904, LTE5398-M904, NR5103E, NR5103v2, NR5307, NR7101, NR7102, NR7302, VMG3625-T50B, VMG4005-B50A, VMG8825-T50",
+    },
+    {"value": "nwa50ax", "label": "Cloud Managed — NWA50AX"},
 ]
 
 SELECT_SCHEMA = vol.Schema(
