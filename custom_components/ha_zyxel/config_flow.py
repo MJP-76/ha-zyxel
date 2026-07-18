@@ -70,8 +70,8 @@ EX3301T0_SCHEMA = vol.Schema(
 
 LEGACY_SCHEMA = vol.Schema(
     {
-        vol.Required(CONF_HOST, default=DEFAULT_HOST): str,
-        vol.Required(CONF_USERNAME, default=DEFAULT_USERNAME): str,
+        vol.Required(CONF_HOST): str,
+        vol.Required(CONF_USERNAME): str,
         vol.Required(CONF_PASSWORD): str,
     }
 )
@@ -97,7 +97,7 @@ def _try_candidates(host: str, device_type: str) -> list[str]:
         return [f"http://{host}", f"https://{host}"]
     if host.startswith("http://") or host.startswith("https://"):
         return [host]
-    return [f"https://{host}", f"http://{host}"]
+    return [f"http://{host}", f"https://{host}"]
 
 
 async def _validate_connection(hass: core.HomeAssistant, data):

@@ -321,12 +321,16 @@ class EX3301T0Client:
             }
         )
         self._session.verify = False
-        page = self._session.get(f"{self.host}/", timeout=self.timeout)
+        page = self._session.get(f"{self.host}/", timeout=self.timeout, allow_redirects=False)
         _LOGGER.debug("EX3301-T0 login page status=%s url=%s", page.status_code, page.url)
-        if page.status_code >= 500:
-            _LOGGER.debug("EX3301-T0 login page returned %s; continuing to probe CGI endpoints", page.status_code)
+        if page.status_code in (301, 302, 303, 307, 308):
+            _LOGGER.debug("EX3301-T0 login page redirected to %s", page.headers.get("Location"))
 
-        key_resp = self._session.get(f"{self.host}/getRSAPublickKey", timeout=self.timeout)
+        key_resp = self._session.get(
+            f"{self.host}/getRSAPublickKey",
+            timeout=self.timeout,
+            allow_redirects=False,
+        )
         key_data = key_resp.json()
         public_key = key_data["RSAPublicKey"]
         login_payload = self._encrypt_login_payload(public_key)
