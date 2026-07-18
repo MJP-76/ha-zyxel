@@ -215,10 +215,10 @@ class NWA50AXClient:
                         return nested
             return None
 
-        name = _search(status, ("fqdn",))
+        name = _search(status, ("system name", "system_name"))
         if name:
             return name
-        name = _search(status, ("hostname", "system_name", "device_name"))
+        name = _search(status, ("fqdn", "hostname", "device_name"))
         if name:
             return name
         return None

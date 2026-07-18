@@ -7,7 +7,7 @@ from datetime import timedelta
 import async_timeout
 from homeassistant.components import frontend
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
@@ -33,6 +33,7 @@ ZyXEL_DASHBOARD_STORAGE_KEY = f"lovelace.{ZyXEL_DASHBOARD_ID}"
 ZyXEL_DASHBOARDS_STORAGE_KEY = "lovelace_dashboards"
 ZyXEL_DASHBOARD_URL_PATH = "zyxel-devices"
 ZYXEL_ENTITY_PREFIXES = ("sensor.", "button.")
+ZYXEL_DASHBOARD_REFRESH_LISTENER = "_zyxel_dashboard_refresh_listener"
 
 
 def _zyxel_dashboard_config(entity_rows: list[str]) -> dict:
@@ -75,10 +76,18 @@ def _zyxel_dashboard_config(entity_rows: list[str]) -> dict:
     }
 
 async def _ensure_zyxel_dashboard(hass: HomeAssistant, entity_rows: list[str]) -> None:
-    """Create a storage-backed dashboard if it does not already exist."""
+    """Create or refresh the shared Zyxel dashboard."""
     dashboards_store = Store[dict[str, object]](hass, 1, ZyXEL_DASHBOARDS_STORAGE_KEY)
     dashboards_data = await dashboards_store.async_load() or {"items": []}
     items = dashboards_data.setdefault("items", [])
+    if not entity_rows:
+        items[:] = [item for item in items if item.get("id") != ZyXEL_DASHBOARD_ID]
+        await dashboards_store.async_save(dashboards_data)
+        dashboard_store = Store[dict[str, object]](hass, 1, ZyXEL_DASHBOARD_STORAGE_KEY)
+        await dashboard_store.async_remove()
+        frontend.async_remove_panel(hass, ZyXEL_DASHBOARD_URL_PATH)
+        return
+
     if not any(item.get("id") == ZyXEL_DASHBOARD_ID for item in items):
         items.append(
             {
@@ -108,6 +117,12 @@ async def _ensure_zyxel_dashboard(hass: HomeAssistant, entity_rows: list[str]) -
     )
 
 
+@callback
+def _schedule_dashboard_refresh(hass: HomeAssistant) -> None:
+    """Refresh the shared Zyxel dashboard asynchronously."""
+    hass.async_create_task(_refresh_zyxel_dashboard(hass))
+
+
 def _dashboard_entity_entries(hass: HomeAssistant) -> list[str]:
     registry = er.async_get(hass)
     entries: list[str] = []
@@ -118,6 +133,11 @@ def _dashboard_entity_entries(hass: HomeAssistant) -> list[str]:
             continue
         entries.append(entity.entity_id)
     return sorted(entries)
+
+
+async def _refresh_zyxel_dashboard(hass: HomeAssistant) -> None:
+    """Refresh or prune the shared Zyxel dashboard."""
+    await _ensure_zyxel_dashboard(hass, _dashboard_entity_entries(hass))
 
 
 def _flatten_value(value, parent_key: str = "") -> dict:
@@ -239,12 +259,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = {
         "coordinator": coordinator,
         "router": router,
+        "device_type": device_type,
     }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     if device_type == "nwa50ax":
-        await _ensure_zyxel_dashboard(hass, _dashboard_entity_entries(hass))
+        if ZYXEL_DASHBOARD_REFRESH_LISTENER not in hass.data:
+            def _handle_entity_registry_update(event) -> None:
+                if event.data.get("action") in ("create", "remove"):
+                    _schedule_dashboard_refresh(hass)
+
+            hass.data[ZYXEL_DASHBOARD_REFRESH_LISTENER] = hass.bus.async_listen(
+                er.EVENT_ENTITY_REGISTRY_UPDATED, _handle_entity_registry_update
+            )
+        await _refresh_zyxel_dashboard(hass)
 
     return True
 
@@ -261,5 +290,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id)
+        if not any(
+            data.get("device_type") == "nwa50ax"
+            for data in hass.data[DOMAIN].values()
+        ):
+            remove_listener = hass.data.pop(ZYXEL_DASHBOARD_REFRESH_LISTENER, None)
+            if remove_listener:
+                remove_listener()
+        await _refresh_zyxel_dashboard(hass)
 
     return unload_ok
