@@ -93,7 +93,9 @@ def _safe_error_message(err: Exception) -> str:
 
 def _is_connection_refused(err: Exception) -> bool:
     if isinstance(err, requests.exceptions.ConnectionError):
-        return True
+        cause = err.__cause__ or err.__context__
+        if isinstance(cause, ConnectionRefusedError):
+            return True
     message = _safe_error_message(err).lower()
     return (
         "connection refused" in message
@@ -234,7 +236,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "invalid_auth"
             except Exception as ex:  # pylint: disable=broad-except
                 if _is_connection_refused(ex):
-                    _LOGGER.debug("EX3301-T0 connection refused for %s", user_input[CONF_HOST])
+                    _LOGGER.warning("EX3301-T0 connection refused for %s", user_input[CONF_HOST])
                 else:
                     _LOGGER.exception("EX3301-T0 validation failed for %s", user_input[CONF_HOST])
                 errors["base"] = "cannot_connect"
