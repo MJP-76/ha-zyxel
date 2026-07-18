@@ -324,7 +324,10 @@ class EX3301T0Client:
         page = self._session.get(f"{self.host}/", timeout=self.timeout, allow_redirects=False)
         _LOGGER.debug("EX3301-T0 login page status=%s url=%s", page.status_code, page.url)
         if page.status_code in (301, 302, 303, 307, 308):
-            _LOGGER.debug("EX3301-T0 login page redirected to %s", page.headers.get("Location"))
+            location = page.headers.get("Location", "")
+            _LOGGER.debug("EX3301-T0 login page redirected to %s", location)
+            if location.startswith("https://"):
+                raise UpdateFailed("EX3301-T0 redirected to HTTPS during login bootstrap")
 
         key_resp = self._session.get(
             f"{self.host}/getRSAPublickKey",
@@ -342,7 +345,10 @@ class EX3301T0Client:
         )
         _LOGGER.debug("EX3301-T0 login status=%s url=%s", resp.status_code, resp.url)
         if resp.status_code in (301, 302, 303, 307, 308):
-            _LOGGER.debug("EX3301-T0 login redirected to %s", resp.headers.get("Location"))
+            location = resp.headers.get("Location", "")
+            _LOGGER.debug("EX3301-T0 login redirected to %s", location)
+            if location.startswith("https://"):
+                raise UpdateFailed("EX3301-T0 redirected to HTTPS during login")
         elif not resp.ok:
             raise UpdateFailed("EX3301-T0 login failed")
         body = self._safe_json(resp, "EX3301-T0 login")
@@ -375,7 +381,13 @@ class EX3301T0Client:
         headers = {}
         if method.lower() in {"post", "put", "delete"} and self._csrf_token:
             headers["CSRFToken"] = self._csrf_token
-        return request(url, timeout=self.timeout, allow_redirects=True, headers=headers)
+        response = request(url, timeout=self.timeout, allow_redirects=False, headers=headers)
+        if response.status_code in (301, 302, 303, 307, 308):
+            location = response.headers.get("Location", "")
+            _LOGGER.debug("EX3301-T0 request %s redirected to %s", endpoint, location)
+            if location.startswith("https://"):
+                raise UpdateFailed(f"EX3301-T0 redirected to HTTPS while requesting {endpoint}")
+        return response
 
     def _probe(self, endpoint: str) -> dict | str | None:
         resp = self._request(endpoint)
