@@ -59,33 +59,51 @@ class NWA50AXClient:
             or self._session.cookies.get("csrftok")
             or self._session.cookies.get("csrf")
         )
-        payload = {"username": self.username, "pwd": self.password}
+        payloads = [
+            {"username": self.username, "pwd": self.password},
+            {"username": self.username, "password": self.password},
+        ]
         if csrf_token:
-            payload["CSRFToken"] = csrf_token
-        resp = self._session.post(
-            f"{self.host}/",
-            data=payload,
-            timeout=self.timeout,
-            allow_redirects=True,
-        )
-        _LOGGER.debug(
-            "NWA50AX login response status=%s url=%s body=%s",
-            resp.status_code,
-            resp.url,
-            resp.text[:500],
-        )
-        if resp.status_code >= 500:
-            _LOGGER.debug("NWA50AX login POST returned %s; checking body/cookies instead of failing hard", resp.status_code)
-        if "login" in resp.text.lower() and "fail" in resp.text.lower():
-            raise UpdateFailed("Login failed")
-        if "invalid" in resp.text.lower() and "password" in resp.text.lower():
-            raise UpdateFailed("Login failed")
-        if not (
-            self._session.cookies.get("authtok")
-            or self._session.cookies.get("authtoken")
-            or self._session.cookies.get("auth")
+            for payload in payloads:
+                payload["CSRFToken"] = csrf_token
+
+        last_response = None
+        for payload in payloads:
+            resp = self._session.post(
+                f"{self.host}/",
+                data=payload,
+                timeout=self.timeout,
+                allow_redirects=True,
+            )
+            last_response = resp
+            if resp.status_code >= 500:
+                _LOGGER.debug(
+                    "NWA50AX login POST returned %s; checking body/cookies instead of failing hard",
+                    resp.status_code,
+                )
+            _LOGGER.debug(
+                "NWA50AX login response status=%s url=%s body=%s",
+                resp.status_code,
+                resp.url,
+                resp.text[:500],
+            )
+            if "login" in resp.text.lower() and "fail" in resp.text.lower():
+                continue
+            if "invalid" in resp.text.lower() and "password" in resp.text.lower():
+                continue
+            if self._session.cookies.get("authtok") or self._session.cookies.get("authtoken") or self._session.cookies.get("auth"):
+                return
+
+        _LOGGER.debug("NWA50AX login cookies after POST attempts: %s", self._session.cookies.get_dict())
+        if last_response is not None and (
+            "login" in last_response.text.lower() and "fail" in last_response.text.lower()
         ):
-            _LOGGER.debug("NWA50AX login cookies after POST: %s", self._session.cookies.get_dict())
+            raise UpdateFailed("Login failed")
+        if last_response is not None and (
+            "invalid" in last_response.text.lower() and "password" in last_response.text.lower()
+        ):
+            raise UpdateFailed("Login failed")
+        raise UpdateFailed("Login session not established")
 
     def _post_cmds(self, cmds: list[str]) -> dict:
         from urllib.parse import quote_plus
@@ -97,7 +115,13 @@ class NWA50AXClient:
             headers={"Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"},
             timeout=self.timeout,
         )
-        resp.raise_for_status()
+        if resp.status_code >= 400:
+            _LOGGER.debug(
+                "NWA50AX zysh-cgi returned %s for %s body=%s",
+                resp.status_code,
+                cmds[0],
+                resp.text[:500],
+            )
         _LOGGER.debug("NWA50AX cmd response for %s: %s", cmds[0], resp.text[:500])
         return self._parse_zysh_response(resp.text)
 
