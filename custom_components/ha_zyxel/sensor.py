@@ -255,15 +255,9 @@ class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
             return False
 
     def _get_value_from_path(self) -> Any:
-        """Get a value from nested dictionaries using the flattened key."""
-        keys = self._key.split(".")
-        value = self.coordinator.data
-        for k in keys:
-            if isinstance(value, list):
-                value = value[int(k)]
-            else:
-                value = value[k]
-        return value
+        """Get a value from the flattened coordinator data."""
+        flattened = _flatten_dict(self.coordinator.data)
+        return flattened[self._key]
 
 
 class ConfiguredZyxelSensor(AbstractZyxelSensor):

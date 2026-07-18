@@ -128,18 +128,13 @@ async def _validate_connection(hass: core.HomeAssistant, data):
             return {"title": title}
         except UpdateFailed as ex:
             last_error = ex
-            _LOGGER.warning(
-                "Candidate %s returned empty data: %s",
-                candidate,
-                _safe_error_message(ex),
-                exc_info=True,
-            )
+            _LOGGER.debug("Candidate %s returned empty data: %s", candidate, _safe_error_message(ex))
         except Exception as ex:  # pylint: disable=broad-except
             last_error = ex
             error_message = _safe_error_message(ex).lower()
             if "auth" in error_message or "login failed" in error_message:
                 raise ConfigEntryAuthFailed from ex
-            _LOGGER.warning("Candidate %s failed: %s", candidate, _safe_error_message(ex), exc_info=True)
+            _LOGGER.debug("Candidate %s failed: %s", candidate, _safe_error_message(ex))
 
     raise last_error if last_error else Exception("Connection failed")
 
