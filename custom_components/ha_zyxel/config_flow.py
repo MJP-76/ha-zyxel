@@ -8,7 +8,7 @@ from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers.selector import SelectSelector, SelectSelectorConfig, SelectSelectorMode
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
-from custom_components.ha_zyxel.backend import NWA50AXClient
+from custom_components.ha_zyxel.backend import EX3301T0Client, NWA50AXClient
 from .const import (
     CONF_DEVICE_TYPE,
     DEFAULT_DEVICE_TYPE,
@@ -23,44 +23,46 @@ nr7101_logger = logging.getLogger("nr7101.nr7101")
 nr7101_logger.setLevel(logging.WARNING)
 
 DEVICE_CHOICES = [
-    {
-        "value": "legacy",
-        "label": "Locally Managed",
-    },
-    {"value": "nwa50ax", "label": "Cloud Managed"},
+    {"value": "generic", "label": "Generic Zyxel Device"},
+    {"value": "ax7501-b0", "label": "AX7501-B0"},
+    {"value": "fwa505", "label": "FWA505"},
+    {"value": "fwa510", "label": "FWA510"},
+    {"value": "fwa710-5g-v2", "label": "FWA710 5G V2"},
+    {"value": "lte3202-m437", "label": "LTE3202-M437"},
+    {"value": "lte7490-m904", "label": "LTE7490-M904"},
+    {"value": "lte5398-m904", "label": "LTE5398-M904"},
+    {"value": "nr5103e", "label": "NR5103E"},
+    {"value": "nr5103v2", "label": "NR5103v2"},
+    {"value": "nr5307", "label": "NR5307"},
+    {"value": "nr7101", "label": "NR7101"},
+    {"value": "nr7102", "label": "NR7102"},
+    {"value": "nr7302", "label": "NR7302"},
+    {"value": "nwa50ax", "label": "NWA50AX AP"},
     {"value": "ex3301_t0", "label": "EX3301-T0 Router"},
+    {"value": "vmg3625-t50b", "label": "VMG3625-T50B"},
+    {"value": "vmg4005-b50a", "label": "VMG4005-B50A"},
+    {"value": "vmg8825-t50", "label": "VMG8825-T50"},
 ]
-
-SUPPORTED_MODELS_TABLE = """| Locally Managed | Cloud Managed |
-| --- | --- |
-| AX7501-B0 | NWA50AX |
-| FWA505 |  |
-| FWA510 |  |
-| FWA710 5G V2 |  |
-| LTE3202-M437 |  |
-| LTE7490-M904 |  |
-| LTE5398-M904 |  |
-| NR5103E |  |
-| NR5103v2 |  |
-| NR5307 |  |
-| NR7101 |  |
-| NR7102 |  |
-| NR7302 |  |
-| VMG3625-T50B |  |
-| VMG4005-B50A |  |
-| VMG8825-T50 |  |"""
 
 SELECT_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_DEVICE_TYPE, default=DEFAULT_DEVICE_TYPE): SelectSelector(
             SelectSelectorConfig(options=DEVICE_CHOICES, mode=SelectSelectorMode.DROPDOWN)
-        ),
+        )
     }
 )
 
 NWA50AX_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_HOST): str,
+        vol.Required(CONF_USERNAME, default=DEFAULT_USERNAME): str,
+        vol.Required(CONF_PASSWORD): str,
+    }
+)
+
+EX3301T0_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_HOST, default=""): str,
         vol.Required(CONF_USERNAME, default=DEFAULT_USERNAME): str,
         vol.Required(CONF_PASSWORD): str,
     }
@@ -92,7 +94,7 @@ def _try_candidates(host: str, device_type: str) -> list[str]:
     if device_type == "nwa50ax":
         return [f"http://{host}", f"https://{host}"]
     if device_type == "ex3301_t0":
-        return [f"https://{host}", f"http://{host}"]
+        return [f"http://{host}", f"https://{host}"]
     if host.startswith("http://") or host.startswith("https://"):
         return [host]
     return [f"https://{host}", f"http://{host}"]
@@ -115,17 +117,13 @@ async def _validate_connection(hass: core.HomeAssistant, data):
                 if not status:
                     raise UpdateFailed("zysh-cgi returned an empty status payload")
                 device_name = await hass.async_add_executor_job(router.get_device_name, status)
-                device_model = await hass.async_add_executor_job(router.get_device_model, status)
             elif device_type == "ex3301_t0":
-                from custom_components.ha_zyxel.backend import EX3301T0Client
-
                 router = EX3301T0Client(candidate, data[CONF_USERNAME], data[CONF_PASSWORD])
                 await hass.async_add_executor_job(router.login)
                 status = await hass.async_add_executor_job(router.get_status)
                 if not status:
-                    raise UpdateFailed("Router returned an empty status payload")
+                    raise UpdateFailed("EX3301-T0 returned an empty CGI payload")
                 device_name = await hass.async_add_executor_job(router.get_device_name, status)
-                device_model = await hass.async_add_executor_job(router.get_device_model, status)
             else:
                 from nr7101 import nr7101
 
@@ -138,13 +136,12 @@ async def _validate_connection(hass: core.HomeAssistant, data):
                 )
                 await hass.async_add_executor_job(router.connect)
                 device_name = None
-                device_model = None
 
-            data[CONF_HOST] = host if device_type == "nwa50ax" else candidate
+            data[CONF_HOST] = host if device_type in {"nwa50ax", "ex3301_t0"} else candidate
             title = device_name or (
-                f"Zyxel {host}" if device_type in ("nwa50ax", "ex3301_t0") else DEFAULT_NAME
+                f"Zyxel {host}" if device_type in {"nwa50ax", "ex3301_t0"} else DEFAULT_NAME
             )
-            return {"title": title, "model": device_model}
+            return {"title": title}
         except UpdateFailed as ex:
             last_error = ex
             _LOGGER.debug("Candidate %s returned empty data: %s", candidate, _safe_error_message(ex))
@@ -166,17 +163,13 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             self._device_type = user_input[CONF_DEVICE_TYPE]
             if self._device_type == "nwa50ax":
-                return await self.async_step_cloud_managed()
+                return await self.async_step_nwa50ax()
             if self._device_type == "ex3301_t0":
                 return await self.async_step_ex3301_t0()
-            return await self.async_step_locally_managed()
-        return self.async_show_form(
-            step_id="user",
-            data_schema=SELECT_SCHEMA,
-            description_placeholders={"supported_models_table": SUPPORTED_MODELS_TABLE},
-        )
+            return await self.async_step_legacy()
+        return self.async_show_form(step_id="user", data_schema=SELECT_SCHEMA)
 
-    async def async_step_cloud_managed(self, user_input=None):
+    async def async_step_nwa50ax(self, user_input=None):
         errors = {}
         if user_input is not None:
             data = {
@@ -187,16 +180,15 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }
             try:
                 info = await _validate_connection(self.hass, data)
-                data["model"] = info.get("model")
                 self._validated_data = data
                 self._validated_info = info
                 return self.async_create_entry(title=info["title"], data=data)
             except ConfigEntryAuthFailed:
                 errors["base"] = "invalid_auth"
             except Exception:  # pylint: disable=broad-except
-                _LOGGER.exception("Cloud Managed validation failed for %s", user_input[CONF_HOST])
+                _LOGGER.exception("NWA50AX validation failed for %s", user_input[CONF_HOST])
                 errors["base"] = "cannot_connect"
-        return self.async_show_form(step_id="cloud_managed", data_schema=NWA50AX_SCHEMA, errors=errors)
+        return self.async_show_form(step_id="nwa50ax", data_schema=NWA50AX_SCHEMA, errors=errors)
 
     async def async_step_ex3301_t0(self, user_input=None):
         errors = {}
@@ -209,34 +201,32 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }
             try:
                 info = await _validate_connection(self.hass, data)
-                data["model"] = info.get("model")
                 return self.async_create_entry(title=info["title"], data=data)
             except ConfigEntryAuthFailed:
                 errors["base"] = "invalid_auth"
-            except Exception:
+            except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception("EX3301-T0 validation failed for %s", user_input[CONF_HOST])
                 errors["base"] = "cannot_connect"
-        return self.async_show_form(step_id="ex3301_t0", data_schema=LEGACY_SCHEMA, errors=errors)
+        return self.async_show_form(step_id="ex3301_t0", data_schema=EX3301T0_SCHEMA, errors=errors)
 
-    async def async_step_locally_managed(self, user_input=None):
+    async def async_step_legacy(self, user_input=None):
         errors = {}
         if user_input is not None:
             data = {
-                CONF_DEVICE_TYPE: "legacy",
+                CONF_DEVICE_TYPE: getattr(self, "_device_type", "legacy"),
                 CONF_HOST: user_input[CONF_HOST],
                 CONF_USERNAME: user_input[CONF_USERNAME],
                 CONF_PASSWORD: user_input[CONF_PASSWORD],
             }
             try:
                 info = await _validate_connection(self.hass, data)
-                data["model"] = info.get("model")
                 return self.async_create_entry(title=info["title"], data=data)
             except ConfigEntryAuthFailed:
                 errors["base"] = "invalid_auth"
             except Exception:  # pylint: disable=broad-except
-                _LOGGER.exception("Locally Managed validation failed for %s", user_input[CONF_HOST])
+                _LOGGER.exception("Legacy validation failed for %s", user_input[CONF_HOST])
                 errors["base"] = "cannot_connect"
-        return self.async_show_form(step_id="locally_managed", data_schema=LEGACY_SCHEMA, errors=errors)
+        return self.async_show_form(step_id="legacy", data_schema=LEGACY_SCHEMA, errors=errors)
 
 
 class ConnectionError(exceptions.HomeAssistantError):

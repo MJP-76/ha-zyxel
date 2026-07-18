@@ -9,11 +9,11 @@ from homeassistant.components import frontend
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from custom_components.ha_zyxel.backend import NWA50AXClient, normalize_zysh_status
+from custom_components.ha_zyxel.backend import EX3301T0Client, NWA50AXClient, normalize_zysh_status
 from custom_components.ha_zyxel.const import (
     CONF_DEVICE_TYPE,
     CONF_HOST,
@@ -34,8 +34,6 @@ ZyXEL_DASHBOARDS_STORAGE_KEY = "lovelace_dashboards"
 ZyXEL_DASHBOARD_URL_PATH = "zyxel-devices"
 ZYXEL_ENTITY_PREFIXES = ("sensor.", "button.")
 ZYXEL_DASHBOARD_REFRESH_LISTENER = "_zyxel_dashboard_refresh_listener"
-ZYXEL_DASHBOARD_PANEL_REGISTERED = "_zyxel_dashboard_panel_registered"
-ZYXEL_VERSION = "0.2.7"
 
 
 def _zyxel_dashboard_config(device_cards: list[dict[str, object]]) -> dict:
@@ -50,21 +48,6 @@ def _zyxel_dashboard_config(device_cards: list[dict[str, object]]) -> dict:
                     "theme": "Backend-selected",
                     "type": "sections",
                     "sections": [
-                        {
-                            "type": "grid",
-                            "cards": [
-                                {
-                                    "type": "markdown",
-                                    "content": (
-                                        "<div style='text-align:center'>"
-                                        "<img src='https://raw.githubusercontent.com/zulufoxtrot/ha-zyxel/refs/heads/main/resources/logo.png' "
-                                        "alt='Zyxel' width='96'/>"
-                                        f"<h2>Zyxel Devices</h2><p>ha-zyxel v{ZYXEL_VERSION}</p>"
-                                        "</div>"
-                                    ),
-                                }
-                            ],
-                        },
                         *device_cards,
                     ],
                 }
@@ -75,100 +58,46 @@ def _zyxel_dashboard_config(device_cards: list[dict[str, object]]) -> dict:
 def _device_title(entry) -> str:
     if entry is None:
         return "Zyxel Device"
-    if entry.get("model"):
-        return entry["model"]
-    if entry.get("title"):
-        return entry["title"]
+    if entry.name_by_user:
+        return entry.name_by_user
+    if entry.name:
+        return entry.name
     return "Zyxel Device"
 
 
 def _dashboard_device_cards(hass: HomeAssistant) -> list[dict[str, object]]:
     entity_registry = er.async_get(hass)
-    grouped: dict[str, dict[str, dict[str, object]]] = {}
+    device_registry = dr.async_get(hass)
+    grouped: dict[str, list[str]] = {}
     for entity in entity_registry.entities.values():
         if entity.platform != DOMAIN:
             continue
         if not entity.entity_id.startswith(ZYXEL_ENTITY_PREFIXES):
             continue
-        if not entity.config_entry_id:
+        if not entity.device_id:
             continue
-        if entity.disabled_by is not None:
-            continue
-        entry = hass.config_entries.async_get_entry(entity.config_entry_id)
-        if entry is None:
-            continue
-        device_type = entry.data.get("device_type", "legacy")
-        type_group = grouped.setdefault(device_type, {})
-        bucket = type_group.setdefault(
-            entity.config_entry_id,
-            {
-                "title": entry.data.get("model") or entry.title,
-                "entities": [],
-            },
-        )
-        bucket["entities"].append(entity.entity_id)
+        grouped.setdefault(entity.device_id, []).append(entity.entity_id)
 
     cards: list[dict[str, object]] = []
-    for device_type in ("legacy", "nwa50ax"):
-        type_group = grouped.get(device_type)
-        if not type_group:
-            continue
+    for device_id in sorted(grouped):
+        device = device_registry.devices.get(device_id)
         cards.append(
             {
-                "type": "heading",
-                "heading": "Cloud Managed" if device_type == "nwa50ax" else "Locally Managed",
-                "heading_style": "title",
-                "icon": "mdi:folder-multiple-outline",
+                "type": "grid",
+                "cards": [
+                    {
+                        "type": "heading",
+                        "heading": _device_title(device),
+                        "heading_style": "subtitle",
+                        "icon": "mdi:access-point",
+                    },
+                    {
+                        "type": "entities",
+                        "entities": sorted(grouped[device_id]),
+                    },
+                ],
             }
         )
-        for config_entry_id in sorted(type_group):
-            bucket = type_group[config_entry_id]
-            cards.append(
-                {
-                    "type": "grid",
-                    "cards": [
-                        {
-                            "type": "heading",
-                            "heading": bucket["title"],
-                            "heading_style": "subtitle",
-                            "icon": "mdi:access-point",
-                        },
-                        {
-                            "type": "entities",
-                            "entities": sorted(bucket["entities"]),
-                        },
-                    ],
-                }
-            )
-    for device_type in sorted(set(grouped) - {"legacy", "nwa50ax"}):
-        type_group = grouped[device_type]
-        cards.append(
-            {
-                "type": "heading",
-                "heading": device_type,
-                "heading_style": "title",
-                "icon": "mdi:folder-multiple-outline",
-            }
-        )
-        for config_entry_id in sorted(type_group):
-            bucket = type_group[config_entry_id]
-            cards.append(
-                {
-                    "type": "grid",
-                    "cards": [
-                        {
-                            "type": "heading",
-                            "heading": bucket["title"],
-                            "heading_style": "subtitle",
-                            "icon": "mdi:access-point",
-                        },
-                        {
-                            "type": "entities",
-                            "entities": sorted(bucket["entities"]),
-                        },
-                    ],
-                }
-            )
     return cards
 
 
@@ -193,29 +122,23 @@ async def _ensure_zyxel_dashboard(hass: HomeAssistant, _entity_rows: list[str]) 
 
     dashboard_store = Store[dict[str, object]](hass, 1, ZyXEL_DASHBOARD_STORAGE_KEY)
     await dashboard_store.async_save(_zyxel_dashboard_config(_dashboard_device_cards(hass)))
-    if not hass.data.get(ZYXEL_DASHBOARD_PANEL_REGISTERED):
-        try:
-            frontend.async_register_built_in_panel(
-                hass,
-                "lovelace",
-                frontend_url_path=ZyXEL_DASHBOARD_URL_PATH,
-                require_admin=False,
-                show_in_sidebar=True,
-                sidebar_title="Zyxel Devices",
-                sidebar_icon="mdi:cloud",
-                config={"mode": "storage"},
-                update=False,
-            )
-        except ValueError as err:
-            if "Overwriting panel" not in str(err):
-                raise
-        hass.data[ZYXEL_DASHBOARD_PANEL_REGISTERED] = True
+    frontend.async_register_built_in_panel(
+        hass,
+        "lovelace",
+        frontend_url_path=ZyXEL_DASHBOARD_URL_PATH,
+        require_admin=False,
+        show_in_sidebar=True,
+        sidebar_title="Zyxel Devices",
+        sidebar_icon="mdi:cloud",
+        config={"mode": "storage"},
+        update=False,
+    )
 
 
 @callback
 def _schedule_dashboard_refresh(hass: HomeAssistant) -> None:
     """Refresh the shared Zyxel dashboard asynchronously."""
-    hass.add_job(_refresh_zyxel_dashboard, hass)
+    hass.async_create_task(_refresh_zyxel_dashboard(hass))
 
 
 def _dashboard_entity_entries(hass: HomeAssistant) -> list[str]:
@@ -307,6 +230,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             router = NWA50AXClient(host, username, password)
             await hass.async_add_executor_job(router.login)
             await hass.async_add_executor_job(router.get_status)
+        elif device_type == "ex3301_t0":
+            router = EX3301T0Client(host, username, password)
+            await hass.async_add_executor_job(router.login)
+            await hass.async_add_executor_job(router.get_status)
         else:
             router = await hass.async_add_executor_job(
                 nr7101.NR7101, host, username, password, {"timeout": 15}
@@ -320,7 +247,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         try:
             async with async_timeout.timeout(15):
                 def get_all_data():
-                    data = router.get_status() if device_type == "nwa50ax" else _merge_status_data(router)
+                    if device_type == "nwa50ax":
+                        data = router.get_status()
+                    elif device_type == "ex3301_t0":
+                        data = router.get_status()
+                    else:
+                        data = _merge_status_data(router)
                     if not data and device_type != "nwa50ax":
                         legacy_data = router.get_status()
                         if legacy_data:
@@ -362,7 +294,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if device_type == "nwa50ax":
         if ZYXEL_DASHBOARD_REFRESH_LISTENER not in hass.data:
             def _handle_entity_registry_update(event) -> None:
-                if event.data.get("action") in ("create", "remove", "update"):
+                if event.data.get("action") in ("create", "remove"):
                     _schedule_dashboard_refresh(hass)
 
             hass.data[ZYXEL_DASHBOARD_REFRESH_LISTENER] = hass.bus.async_listen(
