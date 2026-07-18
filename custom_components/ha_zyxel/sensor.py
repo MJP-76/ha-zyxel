@@ -181,6 +181,42 @@ def _is_value_scalar(value: Any) -> bool:
     return isinstance(value, (str, int, float, bool)) or value is None
 
 
+def _should_skip_sensor_label(label: str) -> bool:
+    """Skip placeholder labels that are not useful entities."""
+    lowered = label.strip().lower()
+    return lowered in {
+        "",
+        "0",
+        "1",
+        "no",
+        "yes",
+        "from",
+        "to",
+        "card",
+        "name",
+        "type",
+        "mode",
+        "model",
+        "service",
+        "active",
+        "band",
+        "profile",
+        "role",
+        "slot1",
+        "slot2",
+        "internet",
+        "ethernet",
+        "activate",
+        "fqdn",
+        "host name",
+        "domain name",
+        "current language",
+        "serial number",
+        "build date",
+        "firmware version",
+    }
+
+
 def _canonical_sensor_key(key: str) -> str:
     """Normalize keys so repeated zysh blocks collapse to one entity."""
     parts = [part for part in key.split(".") if part]
@@ -243,6 +279,8 @@ async def async_setup_entry(
             "_hostname",
             "hostname",
         }:
+            continue
+        if _should_skip_sensor_label(str(value)):
             continue
         # Skip non-scalar values
         if not _is_value_scalar(value):
