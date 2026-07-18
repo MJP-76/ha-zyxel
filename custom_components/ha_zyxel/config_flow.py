@@ -121,7 +121,7 @@ def _try_candidates(host: str, device_type: str) -> list[str]:
     if device_type == "nwa50ax":
         return [f"http://{host}", f"https://{host}"]
     if device_type == "ex3301_t0":
-        return [f"http://{host}", f"https://{host}"]
+        return [f"http://{host}"]
     if host.startswith("http://") or host.startswith("https://"):
         return [host]
     return [f"http://{host}", f"https://{host}"]
