@@ -338,10 +338,12 @@ class EX3301T0Client:
             f"{self.host}/UserLogin",
             data=json.dumps(login_payload),
             timeout=self.timeout,
-            allow_redirects=True,
+            allow_redirects=False,
         )
         _LOGGER.debug("EX3301-T0 login status=%s url=%s", resp.status_code, resp.url)
-        if not resp.ok:
+        if resp.status_code in (301, 302, 303, 307, 308):
+            _LOGGER.debug("EX3301-T0 login redirected to %s", resp.headers.get("Location"))
+        elif not resp.ok:
             raise UpdateFailed("EX3301-T0 login failed")
         body = resp.json()
         if "content" in body and "iv" in body:
