@@ -181,6 +181,18 @@ def _is_value_scalar(value: Any) -> bool:
     return isinstance(value, (str, int, float, bool)) or value is None
 
 
+def _canonical_sensor_key(key: str) -> str:
+    """Normalize keys so repeated zysh blocks collapse to one entity."""
+    parts = [part for part in key.split(".") if part]
+    normalized: list[str] = []
+    for part in parts:
+        lowered = part.lower()
+        if lowered.startswith("zyshdata"):
+            continue
+        normalized.append(lowered)
+    return ".".join(normalized)
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
@@ -191,10 +203,15 @@ async def async_setup_entry(
         return
 
     sensors = []
+    seen_keys: set[str] = set()
 
     # Process all keys in the JSON and create sensors for them
     # We'll use a flat structure for simplicity
     for key, value in _flatten_dict(coordinator.data).items():
+        canonical_key = _canonical_sensor_key(key)
+        if canonical_key in seen_keys:
+            continue
+        seen_keys.add(canonical_key)
         if key.lower() in {"language", "language_setting", "show language setting"}:
             continue
         # Skip non-scalar values
