@@ -8,10 +8,12 @@ import async_timeout
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from custom_components.ha_zyxel.backend import NWA50AXClient, normalize_zysh_status
 from custom_components.ha_zyxel.const import (
+    CONF_CREATE_DASHBOARD,
     CONF_DEVICE_TYPE,
     CONF_HOST,
     CONF_PASSWORD,
@@ -25,6 +27,58 @@ _LOGGER = logging.getLogger(__name__)
 from nr7101 import nr7101
 
 PLATFORMS = ["sensor", "button"]
+ZyXEL_DASHBOARD_ID = "zyxel-nebula"
+ZyXEL_DASHBOARD_STORAGE_KEY = f"lovelace.{ZyXEL_DASHBOARD_ID}"
+ZyXEL_DASHBOARDS_STORAGE_KEY = "lovelace_dashboards"
+ZyXEL_DASHBOARD_URL_PATH = "zyxel-nebula"
+
+
+def _zyxel_dashboard_config(title: str) -> dict:
+    return {
+        "config": {
+            "title": title,
+            "views": [
+                {
+                    "title": "Overview",
+                    "path": ZyXEL_DASHBOARD_URL_PATH,
+                    "icon": "mdi:cloud",
+                    "theme": "Backend-selected",
+                    "type": "sections",
+                    "sections": [
+                        {
+                            "type": "grid",
+                            "cards": [
+                                {"type": "heading", "heading": title, "heading_style": "title", "icon": "mdi:cloud-outline"},
+                            ],
+                        }
+                    ],
+                }
+            ],
+        }
+    }
+
+
+async def _ensure_zyxel_dashboard(hass: HomeAssistant, title: str) -> None:
+    """Create a storage-backed dashboard if it does not already exist."""
+    dashboards_store = Store[dict[str, object]](hass, 1, ZyXEL_DASHBOARDS_STORAGE_KEY)
+    dashboards_data = await dashboards_store.async_load() or {"items": []}
+    items = dashboards_data.setdefault("items", [])
+    if not any(item.get("id") == ZyXEL_DASHBOARD_ID for item in items):
+        items.append(
+            {
+                "id": ZyXEL_DASHBOARD_ID,
+                "title": title,
+                "url_path": ZyXEL_DASHBOARD_URL_PATH,
+                "icon": "mdi:cloud",
+                "show_in_sidebar": True,
+                "require_admin": False,
+                "mode": "storage",
+            }
+        )
+        await dashboards_store.async_save(dashboards_data)
+
+    dashboard_store = Store[dict[str, object]](hass, 1, ZyXEL_DASHBOARD_STORAGE_KEY)
+    await dashboard_store.async_save(_zyxel_dashboard_config(title))
 
 
 def _flatten_value(value, parent_key: str = "") -> dict:
@@ -90,6 +144,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     username = entry.data[CONF_USERNAME]
     password = entry.data[CONF_PASSWORD]
     device_type = entry.data.get(CONF_DEVICE_TYPE, "legacy")
+    create_dashboard = entry.data.get(CONF_CREATE_DASHBOARD, False)
     if device_type == "nwa50ax" and not host.startswith(("http://", "https://")):
         host = f"http://{host}"
 
@@ -141,6 +196,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
 
     await coordinator.async_config_entry_first_refresh()
+
+    if device_type == "nwa50ax" and create_dashboard:
+        await _ensure_zyxel_dashboard(hass, entry.title)
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
