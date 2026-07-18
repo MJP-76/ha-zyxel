@@ -1,0 +1,9 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "description": "Choose how this Zyxel device is managed.\n\n{supported_models_table}"
+      }
+    }
+  }
+}

@@ -25,10 +25,29 @@ nr7101_logger.setLevel(logging.WARNING)
 DEVICE_CHOICES = [
     {
         "value": "legacy",
-        "label": "Locally Managed — AX7501-B0, FWA505, FWA510, FWA710 5G V2, LTE3202-M437, LTE7490-M904, LTE5398-M904, NR5103E, NR5103v2, NR5307, NR7101, NR7102, NR7302, VMG3625-T50B, VMG4005-B50A, VMG8825-T50",
+        "label": "Locally Managed",
     },
-    {"value": "nwa50ax", "label": "Cloud Managed — NWA50AX"},
+    {"value": "nwa50ax", "label": "Cloud Managed"},
 ]
+
+SUPPORTED_MODELS_TABLE = """| Locally Managed | Cloud Managed |
+| --- | --- |
+| AX7501-B0 | NWA50AX |
+| FWA505 |  |
+| FWA510 |  |
+| FWA710 5G V2 |  |
+| LTE3202-M437 |  |
+| LTE7490-M904 |  |
+| LTE5398-M904 |  |
+| NR5103E |  |
+| NR5103v2 |  |
+| NR5307 |  |
+| NR7101 |  |
+| NR7102 |  |
+| NR7302 |  |
+| VMG3625-T50B |  |
+| VMG4005-B50A |  |
+| VMG8825-T50 |  |"""
 
 SELECT_SCHEMA = vol.Schema(
     {
@@ -134,7 +153,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if self._device_type == "nwa50ax":
                 return await self.async_step_cloud_managed()
             return await self.async_step_locally_managed()
-        return self.async_show_form(step_id="user", data_schema=SELECT_SCHEMA)
+        return self.async_show_form(
+            step_id="user",
+            data_schema=SELECT_SCHEMA,
+            description_placeholders={"supported_models_table": SUPPORTED_MODELS_TABLE},
+        )
 
     async def async_step_cloud_managed(self, user_input=None):
         errors = {}
