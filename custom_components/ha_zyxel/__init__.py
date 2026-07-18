@@ -84,7 +84,7 @@ def _device_title(entry) -> str:
 
 def _dashboard_device_cards(hass: HomeAssistant) -> list[dict[str, object]]:
     entity_registry = er.async_get(hass)
-    grouped: dict[str, dict[str, object]] = {}
+    grouped: dict[str, dict[str, dict[str, object]]] = {}
     for entity in entity_registry.entities.values():
         if entity.platform != DOMAIN:
             continue
@@ -97,32 +97,78 @@ def _dashboard_device_cards(hass: HomeAssistant) -> list[dict[str, object]]:
         entry = hass.config_entries.async_get_entry(entity.config_entry_id)
         if entry is None:
             continue
-        bucket = grouped.setdefault(
+        device_type = entry.data.get("device_type", "legacy")
+        type_group = grouped.setdefault(device_type, {})
+        bucket = type_group.setdefault(
             entity.config_entry_id,
-            {"title": _device_title({"title": entry.title, "model": entry.data.get("model")}), "entities": []},
+            {
+                "title": _device_title({"title": entry.title, "model": entry.data.get("model")}),
+                "entities": [],
+            },
         )
         bucket["entities"].append(entity.entity_id)
 
     cards: list[dict[str, object]] = []
-    for config_entry_id in sorted(grouped):
-        bucket = grouped[config_entry_id]
+    for device_type in ("legacy", "nwa50ax"):
+        type_group = grouped.get(device_type)
+        if not type_group:
+            continue
         cards.append(
             {
-                "type": "grid",
-                "cards": [
-                    {
-                        "type": "heading",
-                        "heading": bucket["title"],
-                        "heading_style": "subtitle",
-                        "icon": "mdi:access-point",
-                    },
-                    {
-                        "type": "entities",
-                        "entities": sorted(bucket["entities"]),
-                    },
-                ],
+                "type": "heading",
+                "heading": "Cloud Managed" if device_type == "nwa50ax" else "Locally Managed",
+                "heading_style": "title",
+                "icon": "mdi:folder-multiple-outline",
             }
         )
+        for config_entry_id in sorted(type_group):
+            bucket = type_group[config_entry_id]
+            cards.append(
+                {
+                    "type": "grid",
+                    "cards": [
+                        {
+                            "type": "heading",
+                            "heading": bucket["title"],
+                            "heading_style": "subtitle",
+                            "icon": "mdi:access-point",
+                        },
+                        {
+                            "type": "entities",
+                            "entities": sorted(bucket["entities"]),
+                        },
+                    ],
+                }
+            )
+    for device_type in sorted(set(grouped) - {"legacy", "nwa50ax"}):
+        type_group = grouped[device_type]
+        cards.append(
+            {
+                "type": "heading",
+                "heading": device_type,
+                "heading_style": "title",
+                "icon": "mdi:folder-multiple-outline",
+            }
+        )
+        for config_entry_id in sorted(type_group):
+            bucket = type_group[config_entry_id]
+            cards.append(
+                {
+                    "type": "grid",
+                    "cards": [
+                        {
+                            "type": "heading",
+                            "heading": bucket["title"],
+                            "heading_style": "subtitle",
+                            "icon": "mdi:access-point",
+                        },
+                        {
+                            "type": "entities",
+                            "entities": sorted(bucket["entities"]),
+                        },
+                    ],
+                }
+            )
     return cards
 
 
@@ -316,7 +362,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if device_type == "nwa50ax":
         if ZYXEL_DASHBOARD_REFRESH_LISTENER not in hass.data:
             def _handle_entity_registry_update(event) -> None:
-                if event.data.get("action") in ("create", "remove"):
+                if event.data.get("action") in ("create", "remove", "update"):
                     _schedule_dashboard_refresh(hass)
 
             hass.data[ZYXEL_DASHBOARD_REFRESH_LISTENER] = hass.bus.async_listen(
