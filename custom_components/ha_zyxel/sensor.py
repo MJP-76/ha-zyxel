@@ -182,7 +182,7 @@ def _is_value_scalar(value: Any) -> bool:
 
 
 def _should_skip_sensor_label(label: str) -> bool:
-    """Skip placeholder labels that are not useful entities."""
+    """Mark placeholder labels that should be disabled by default."""
     lowered = label.strip().lower()
     return lowered in {
         "",
@@ -264,24 +264,6 @@ async def async_setup_entry(
         if canonical_key in seen_keys:
             continue
         seen_keys.add(canonical_key)
-        if key.lower() in {
-            "language",
-            "language_setting",
-            "show language setting",
-            "_model",
-            "model",
-            "_name",
-            "name",
-            "_system_name",
-            "system_name",
-            "_fqdn",
-            "fqdn",
-            "_hostname",
-            "hostname",
-        }:
-            continue
-        if _should_skip_sensor_label(str(value)):
-            continue
         # Skip non-scalar values
         if not _is_value_scalar(value):
             continue
@@ -328,6 +310,7 @@ class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
             manufacturer="Zyxel",
             model=entry.data.get("model") or "Zyxel",
         )
+        self._attr_entity_registry_enabled_default = not _should_skip_sensor_label(key)
 
     @property
     def available(self) -> bool:

@@ -85,6 +85,7 @@ def _device_title(entry) -> str:
 def _dashboard_device_cards(hass: HomeAssistant) -> list[dict[str, object]]:
     entity_registry = er.async_get(hass)
     grouped: dict[str, dict[str, object]] = {}
+    duplicates: list[str] = []
     for entity in entity_registry.entities.values():
         if entity.platform != DOMAIN:
             continue
@@ -94,6 +95,9 @@ def _dashboard_device_cards(hass: HomeAssistant) -> list[dict[str, object]]:
             continue
         entry = hass.config_entries.async_get_entry(entity.config_entry_id)
         if entry is None:
+            continue
+        if entity.disabled_by is not None:
+            duplicates.append(entity.entity_id)
             continue
         bucket = grouped.setdefault(
             entity.config_entry_id,
@@ -117,6 +121,24 @@ def _dashboard_device_cards(hass: HomeAssistant) -> list[dict[str, object]]:
                     {
                         "type": "entities",
                         "entities": sorted(bucket["entities"]),
+                    },
+                ],
+            }
+        )
+    if duplicates:
+        cards.append(
+            {
+                "type": "grid",
+                "cards": [
+                    {
+                        "type": "heading",
+                        "heading": "Duplicates",
+                        "heading_style": "subtitle",
+                        "icon": "mdi:alert-circle-outline",
+                    },
+                    {
+                        "type": "entities",
+                        "entities": sorted(duplicates),
                     },
                 ],
             }
