@@ -9,7 +9,7 @@ from homeassistant.components import frontend
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
@@ -36,7 +36,7 @@ ZYXEL_ENTITY_PREFIXES = ("sensor.", "button.")
 ZYXEL_DASHBOARD_REFRESH_LISTENER = "_zyxel_dashboard_refresh_listener"
 
 
-def _zyxel_dashboard_config(entity_rows: list[str]) -> dict:
+def _zyxel_dashboard_config(device_cards: list[dict[str, object]]) -> dict:
     return {
         "config": {
             "title": "Zyxel Devices",
@@ -48,46 +48,64 @@ def _zyxel_dashboard_config(entity_rows: list[str]) -> dict:
                     "theme": "Backend-selected",
                     "type": "sections",
                     "sections": [
-                        {
-                            "type": "grid",
-                            "cards": [
-                                {
-                                    "type": "heading",
-                                    "heading": "Zyxel Devices",
-                                    "heading_style": "title",
-                                    "icon": "mdi:cloud-outline",
-                                },
-                            ],
-                        },
-                        {
-                            "type": "grid",
-                            "cards": [
-                                {
-                                    "type": "entities",
-                                    "title": "All Zyxel Devices",
-                                    "entities": entity_rows,
-                                },
-                            ],
-                        }
+                        *device_cards,
                     ],
                 }
             ],
         }
     }
 
-async def _ensure_zyxel_dashboard(hass: HomeAssistant, entity_rows: list[str]) -> None:
+def _device_title(entry) -> str:
+    if entry is None:
+        return "Zyxel Device"
+    if entry.name_by_user:
+        return entry.name_by_user
+    if entry.name:
+        return entry.name
+    return "Zyxel Device"
+
+
+def _dashboard_device_cards(hass: HomeAssistant) -> list[dict[str, object]]:
+    entity_registry = er.async_get(hass)
+    device_registry = dr.async_get(hass)
+    grouped: dict[str, list[str]] = {}
+    for entity in entity_registry.entities.values():
+        if entity.platform != DOMAIN:
+            continue
+        if not entity.entity_id.startswith(ZYXEL_ENTITY_PREFIXES):
+            continue
+        if not entity.device_id:
+            continue
+        grouped.setdefault(entity.device_id, []).append(entity.entity_id)
+
+    cards: list[dict[str, object]] = []
+    for device_id in sorted(grouped):
+        device = device_registry.devices.get(device_id)
+        cards.append(
+            {
+                "type": "grid",
+                "cards": [
+                    {
+                        "type": "heading",
+                        "heading": _device_title(device),
+                        "heading_style": "subtitle",
+                        "icon": "mdi:access-point",
+                    },
+                    {
+                        "type": "entities",
+                        "entities": sorted(grouped[device_id]),
+                    },
+                ],
+            }
+        )
+    return cards
+
+
+async def _ensure_zyxel_dashboard(hass: HomeAssistant, _entity_rows: list[str]) -> None:
     """Create or refresh the shared Zyxel dashboard."""
     dashboards_store = Store[dict[str, object]](hass, 1, ZyXEL_DASHBOARDS_STORAGE_KEY)
     dashboards_data = await dashboards_store.async_load() or {"items": []}
     items = dashboards_data.setdefault("items", [])
-    if not entity_rows:
-        items[:] = [item for item in items if item.get("id") != ZyXEL_DASHBOARD_ID]
-        await dashboards_store.async_save(dashboards_data)
-        dashboard_store = Store[dict[str, object]](hass, 1, ZyXEL_DASHBOARD_STORAGE_KEY)
-        await dashboard_store.async_remove()
-        frontend.async_remove_panel(hass, ZyXEL_DASHBOARD_URL_PATH)
-        return
-
     if not any(item.get("id") == ZyXEL_DASHBOARD_ID for item in items):
         items.append(
             {
@@ -103,7 +121,7 @@ async def _ensure_zyxel_dashboard(hass: HomeAssistant, entity_rows: list[str]) -
         await dashboards_store.async_save(dashboards_data)
 
     dashboard_store = Store[dict[str, object]](hass, 1, ZyXEL_DASHBOARD_STORAGE_KEY)
-    await dashboard_store.async_save(_zyxel_dashboard_config(entity_rows))
+    await dashboard_store.async_save(_zyxel_dashboard_config(_dashboard_device_cards(hass)))
     frontend.async_register_built_in_panel(
         hass,
         "lovelace",
