@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from datetime import timedelta
 
 import async_timeout
+from homeassistant.components import frontend
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
@@ -94,6 +95,17 @@ async def _ensure_zyxel_dashboard(hass: HomeAssistant, entity_rows: list[str]) -
 
     dashboard_store = Store[dict[str, object]](hass, 1, ZyXEL_DASHBOARD_STORAGE_KEY)
     await dashboard_store.async_save(_zyxel_dashboard_config(entity_rows))
+    frontend.async_register_built_in_panel(
+        hass,
+        "lovelace",
+        frontend_url_path=ZyXEL_DASHBOARD_URL_PATH,
+        require_admin=False,
+        show_in_sidebar=True,
+        sidebar_title="Zyxel Devices",
+        sidebar_icon="mdi:cloud",
+        config={"mode": "storage"},
+        update=False,
+    )
 
 
 def _dashboard_entity_entries(hass: HomeAssistant) -> list[str]:

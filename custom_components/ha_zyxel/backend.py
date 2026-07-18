@@ -13,6 +13,7 @@ from homeassistant.helpers.update_coordinator import UpdateFailed
 
 _LOGGER = logging.getLogger(__name__)
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+_IP_LIKE_RE = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}$")
 
 
 class NWA50AXClient:
@@ -187,7 +188,15 @@ class NWA50AXClient:
         """Return the best device name we can find in zysh status data."""
         def _search(node: Mapping | list | str | object) -> str | None:
             if isinstance(node, str):
-                return node.strip() or None
+                candidate = node.strip()
+                if not candidate:
+                    return None
+                lowered = candidate.lower()
+                if lowered.startswith(("http://", "https://")):
+                    return None
+                if _IP_LIKE_RE.match(candidate):
+                    return None
+                return candidate
             if isinstance(node, Mapping):
                 for key, value in node.items():
                     key_lower = key.lower() if isinstance(key, str) else ""
