@@ -205,6 +205,12 @@ class NWA50AXClient:
                 nested = NWA50AXClient.get_device_name(value)
                 if nested:
                     return nested
+            if isinstance(value, list):
+                for item in value:
+                    if isinstance(item, Mapping):
+                        nested = NWA50AXClient.get_device_name(item)
+                        if nested:
+                            return nested
         return None
 
     def reboot(self) -> None:

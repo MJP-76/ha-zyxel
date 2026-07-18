@@ -78,6 +78,10 @@ Note: the Mushroom card extension is required for the above code to work.
 
 ![](resources/import_demo.gif)
 
+## Nebula-style dashboard starter
+
+If you want a cleaner Nebula-style overview, use `resources/nebula_dashboard.yml` as a starter Lovelace dashboard and adjust the entity IDs to match your device.
+
 ## Available entities
 
 In theory, all items listed [here](https://github.com/pkorpine/nr7101?tab=readme-ov-file#example-output) should be available as entities. The entities are generated dynamically, meaning they can vary from one device to another. They depend on what the device lets us see.

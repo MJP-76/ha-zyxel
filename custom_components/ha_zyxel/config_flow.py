@@ -10,6 +10,7 @@ from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from custom_components.ha_zyxel.backend import NWA50AXClient
 from .const import (
+    CONF_CREATE_DASHBOARD,
     CONF_DEVICE_TYPE,
     DEFAULT_DEVICE_TYPE,
     DEFAULT_HOST,
@@ -88,20 +89,20 @@ def _try_candidates(host: str, device_type: str) -> list[str]:
     return [f"https://{host}", f"http://{host}"]
 
 
+DASHBOARD_SCHEMA = vol.Schema(
+    {vol.Required(CONF_CREATE_DASHBOARD, default=True): bool}
+)
+
+
 async def _validate_connection(hass: core.HomeAssistant, data):
     device_type = data[CONF_DEVICE_TYPE]
     host = _normalize_host(data[CONF_HOST])
 
-    _LOGGER.warning(
-        "Validating Zyxel connection to %s as %s (%s)",
-        host,
-        data[CONF_USERNAME],
-        device_type,
-    )
+    _LOGGER.debug("Validating Zyxel connection to %s as %s (%s)", host, data[CONF_USERNAME], device_type)
 
     last_error = None
     for candidate in _try_candidates(host, device_type):
-        _LOGGER.warning("Trying Zyxel connection candidate %s", candidate)
+        _LOGGER.debug("Trying Zyxel connection candidate %s", candidate)
         try:
             if device_type == "nwa50ax":
                 router = NWA50AXClient(candidate, data[CONF_USERNAME], data[CONF_PASSWORD])
@@ -162,13 +163,28 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }
             try:
                 info = await _validate_connection(self.hass, data)
-                return self.async_create_entry(title=info["title"], data=data)
+                self._validated_data = data
+                self._validated_info = info
+                return await self.async_step_dashboard()
             except ConfigEntryAuthFailed:
                 errors["base"] = "invalid_auth"
             except Exception:  # pylint: disable=broad-except
                 _LOGGER.exception("NWA50AX validation failed for %s", user_input[CONF_HOST])
                 errors["base"] = "cannot_connect"
         return self.async_show_form(step_id="nwa50ax", data_schema=NWA50AX_SCHEMA, errors=errors)
+
+    async def async_step_dashboard(self, user_input=None):
+        if user_input is not None:
+            data = {
+                CONF_DEVICE_TYPE: "nwa50ax",
+                CONF_HOST: self._validated_data[CONF_HOST],
+                CONF_USERNAME: self._validated_data[CONF_USERNAME],
+                CONF_PASSWORD: self._validated_data[CONF_PASSWORD],
+                CONF_CREATE_DASHBOARD: user_input[CONF_CREATE_DASHBOARD],
+            }
+            return self.async_create_entry(title=self._validated_info["title"], data=data)
+
+        return self.async_show_form(step_id="dashboard", data_schema=DASHBOARD_SCHEMA)
 
     async def async_step_legacy(self, user_input=None):
         errors = {}

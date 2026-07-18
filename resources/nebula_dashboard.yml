@@ -1,0 +1,116 @@
+title: Zyxel Nebula
+views:
+  - title: Overview
+    path: zyxel-nebula
+    icon: mdi:cloud
+    theme: Backend-selected
+    type: sections
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: Zyxel Nebula
+            heading_style: title
+            icon: mdi:cloud-outline
+          - type: custom:mushroom-chips-card
+            chips:
+              - type: entity
+                entity: sensor.zyxel_device_info_deviceinfo_uptime
+                icon: mdi:clock-outline
+              - type: entity
+                entity: sensor.zyxel_cellular_intf_current_access_technology
+                icon: mdi:access-point
+              - type: entity
+                entity: sensor.zyxel_cellular_rssi
+                icon: mdi:signal
+              - type: entity
+                entity: sensor.zyxel_cellular_signal_to_noise_ratio
+                icon: mdi:signal-variant
+      - type: grid
+        cards:
+          - type: custom:mushroom-template-card
+            entity: sensor.zyxel_device_info_deviceinfo_uptime
+            primary: "{{ states(entity) }}"
+            secondary: Uptime
+            icon: mdi:clock-outline
+            icon_color: blue
+            tap_action:
+              action: more-info
+          - type: custom:mushroom-template-card
+            entity: sensor.zyxel_cellular_rssi
+            primary: |
+              {% set rssi = states(entity) | int(999) %}
+              {% if rssi == 999 %}
+                Unknown
+              {% elif rssi >= -77 %}
+                Excellent
+              {% elif rssi >= -86 %}
+                Good
+              {% elif rssi >= -101 %}
+                Fair
+              {% else %}
+                Poor
+              {% endif %}
+            secondary: Signal quality
+            icon: mdi:signal-cellular-3
+            icon_color: |
+              {% set rssi = states(entity) | int(999) %}
+              {% if rssi == 999 %}
+                grey
+              {% elif rssi >= -86 %}
+                green
+              {% elif rssi >= -101 %}
+                orange
+              {% else %}
+                red
+              {% endif %}
+            tap_action:
+              action: more-info
+          - type: custom:mushroom-template-card
+            entity: sensor.zyxel_cellular_signal_to_noise_ratio
+            primary: "{{ states(entity) }}"
+            secondary: Signal-to-noise
+            icon: mdi:signal-distance-variant
+            icon_color: blue
+            tap_action:
+              action: more-info
+          - type: custom:mushroom-template-card
+            entity: sensor.zyxel_cellular_intf_current_access_technology
+            primary: "{{ states(entity) }}"
+            secondary: Access technology
+            icon: mdi:access-point-network
+            icon_color: teal
+            tap_action:
+              action: more-info
+      - type: grid
+        cards:
+          - type: heading
+            heading: Traffic
+            heading_style: subtitle
+          - type: custom:mushroom-template-card
+            entity: sensor.zyxel_bytes_received_2
+            primary: >
+              {{ (states(entity) | int(0) / 1000 / 1000 / 1000) | round(1) }} GB
+            secondary: Received
+            icon: mdi:download-network
+            icon_color: blue
+            tap_action:
+              action: more-info
+          - type: custom:mushroom-template-card
+            entity: sensor.zyxel_bytes_sent_2
+            primary: >
+              {{ (states(entity) | int(0) / 1000 / 1000 / 1000) | round(1) }} GB
+            secondary: Sent
+            icon: mdi:upload-network
+            icon_color: orange
+            tap_action:
+              action: more-info
+          - type: entities
+            title: Device details
+            entities:
+              - sensor.zyxel_device_info_deviceinfo_uptime
+              - sensor.zyxel_cellular_rssi
+              - sensor.zyxel_cellular_signal_to_noise_ratio
+              - sensor.zyxel_cellular_intf_current_access_technology
+              - sensor.zyxel_bytes_received_2
+              - sensor.zyxel_bytes_sent_2
