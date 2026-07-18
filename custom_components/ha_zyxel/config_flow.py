@@ -54,6 +54,8 @@ SELECT_SCHEMA = vol.Schema(
         vol.Required(CONF_DEVICE_TYPE, default=DEFAULT_DEVICE_TYPE): SelectSelector(
             SelectSelectorConfig(options=DEVICE_CHOICES, mode=SelectSelectorMode.DROPDOWN)
         )
+
+        SELECT_FLOW_DESCRIPTION = "Select Device Type\n\n{supported_models_table}"
     }
 )
 
