@@ -236,7 +236,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "invalid_auth"
             except Exception as ex:  # pylint: disable=broad-except
                 if _is_connection_refused(ex):
-                    _LOGGER.warning("EX3301-T0 connection refused for %s", user_input[CONF_HOST])
+                    _LOGGER.debug("EX3301-T0 connection refused for %s", user_input[CONF_HOST])
                 else:
                     _LOGGER.exception("EX3301-T0 validation failed for %s", user_input[CONF_HOST])
                 errors["base"] = "cannot_connect"
