@@ -268,6 +268,101 @@ class NWA50AXClient:
         self._post_cmds(["reboot"])
 
 
+class EX3301T0Client:
+    """Reverse-engineering scaffold for the Zyxel EX3301-T0 router."""
+
+    def __init__(self, host: str, username: str, password: str, timeout: int = 15) -> None:
+        self.host = host.rstrip("/")
+        self.username = username
+        self.password = password
+        self.timeout = timeout
+        self._session = requests.Session()
+        self._session.headers.update(
+            {
+                "User-Agent": "Mozilla/5.0",
+                "X-Requested-With": "XMLHttpRequest",
+                "Origin": self.host,
+                "Referer": f"{self.host}/",
+            }
+        )
+        self._session.verify = False
+
+    def login(self) -> None:
+        page = self._session.get(f"{self.host}/", timeout=self.timeout)
+        _LOGGER.debug("EX3301-T0 login page status=%s url=%s", page.status_code, page.url)
+        _LOGGER.debug("EX3301-T0 login page head=%s", page.text[:500])
+        payloads = [
+            {"username": self.username, "password": self.password},
+            {"user": self.username, "password": self.password},
+            {"loginUsername": self.username, "loginPassword": self.password},
+        ]
+        for payload in payloads:
+            resp = self._session.post(f"{self.host}/", data=payload, timeout=self.timeout, allow_redirects=True)
+            _LOGGER.debug("EX3301-T0 login response status=%s url=%s", resp.status_code, resp.url)
+            _LOGGER.debug("EX3301-T0 login response head=%s", resp.text[:500])
+            if self._session.cookies.get_dict():
+                return
+        raise UpdateFailed("Login session not established")
+
+    def get_status(self) -> dict:
+        candidates = [
+            "/cgi-bin/DAL?oid=DeviceInfo",
+            "/cgi-bin/DAL?oid=Device",
+            "/cgi-bin/Status",
+            "/cgi-bin/Status.json",
+            "/cgi-bin/Status.cgi",
+        ]
+        collected: dict[str, object] = {}
+        for path in candidates:
+            url = f"{self.host}{path}"
+            resp = self._session.get(url, timeout=self.timeout)
+            _LOGGER.debug("EX3301-T0 probe %s status=%s", path, resp.status_code)
+            _LOGGER.debug("EX3301-T0 probe %s head=%s", path, resp.text[:500])
+            if resp.status_code >= 400:
+                continue
+            parsed = self._parse_probe_response(resp.text)
+            if parsed:
+                collected[path] = parsed
+        if not collected:
+            raise UpdateFailed("EX3301-T0 returned no usable probe data")
+        return collected
+
+    @staticmethod
+    def _parse_probe_response(text: str) -> dict:
+        stripped = text.strip()
+        if not stripped:
+            return {}
+        if stripped.startswith("{") or stripped.startswith("["):
+            try:
+                parsed_json = json.loads(stripped)
+            except json.JSONDecodeError:
+                pass
+            else:
+                if isinstance(parsed_json, dict):
+                    return parsed_json
+        return {}
+
+    @staticmethod
+    def get_device_name(status: Mapping) -> str | None:
+        for value in status.values():
+            if isinstance(value, Mapping):
+                for key in ("system_name", "SystemName", "host_name", "hostname"):
+                    candidate = value.get(key)
+                    if isinstance(candidate, str) and candidate.strip():
+                        return candidate.strip()
+        return None
+
+    @staticmethod
+    def get_device_model(status: Mapping) -> str | None:
+        for value in status.values():
+            if isinstance(value, Mapping):
+                for key in ("model_name", "ModelName", "model"):
+                    candidate = value.get(key)
+                    if isinstance(candidate, str) and candidate.strip():
+                        return candidate.strip()
+        return None
+
+
 def normalize_zysh_status(data: Mapping) -> dict:
     """Flatten the zysh response into a status dict."""
     normalized: dict = {}

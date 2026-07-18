@@ -28,6 +28,7 @@ DEVICE_CHOICES = [
         "label": "Locally Managed",
     },
     {"value": "nwa50ax", "label": "Cloud Managed"},
+    {"value": "ex3301_t0", "label": "EX3301-T0 Router"},
 ]
 
 SUPPORTED_MODELS_TABLE = """| Locally Managed | Cloud Managed |
@@ -90,6 +91,8 @@ def _safe_error_message(err: Exception) -> str:
 def _try_candidates(host: str, device_type: str) -> list[str]:
     if device_type == "nwa50ax":
         return [f"http://{host}", f"https://{host}"]
+    if device_type == "ex3301_t0":
+        return [f"https://{host}", f"http://{host}"]
     if host.startswith("http://") or host.startswith("https://"):
         return [host]
     return [f"https://{host}", f"http://{host}"]
@@ -113,6 +116,16 @@ async def _validate_connection(hass: core.HomeAssistant, data):
                     raise UpdateFailed("zysh-cgi returned an empty status payload")
                 device_name = await hass.async_add_executor_job(router.get_device_name, status)
                 device_model = await hass.async_add_executor_job(router.get_device_model, status)
+            elif device_type == "ex3301_t0":
+                from custom_components.ha_zyxel.backend import EX3301T0Client
+
+                router = EX3301T0Client(candidate, data[CONF_USERNAME], data[CONF_PASSWORD])
+                await hass.async_add_executor_job(router.login)
+                status = await hass.async_add_executor_job(router.get_status)
+                if not status:
+                    raise UpdateFailed("Router returned an empty status payload")
+                device_name = await hass.async_add_executor_job(router.get_device_name, status)
+                device_model = await hass.async_add_executor_job(router.get_device_model, status)
             else:
                 from nr7101 import nr7101
 
@@ -128,7 +141,9 @@ async def _validate_connection(hass: core.HomeAssistant, data):
                 device_model = None
 
             data[CONF_HOST] = host if device_type == "nwa50ax" else candidate
-            title = device_name or (f"Zyxel {host}" if device_type == "nwa50ax" else DEFAULT_NAME)
+            title = device_name or (
+                f"Zyxel {host}" if device_type in ("nwa50ax", "ex3301_t0") else DEFAULT_NAME
+            )
             return {"title": title, "model": device_model}
         except UpdateFailed as ex:
             last_error = ex
@@ -152,6 +167,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._device_type = user_input[CONF_DEVICE_TYPE]
             if self._device_type == "nwa50ax":
                 return await self.async_step_cloud_managed()
+            if self._device_type == "ex3301_t0":
+                return await self.async_step_ex3301_t0()
             return await self.async_step_locally_managed()
         return self.async_show_form(
             step_id="user",
@@ -180,6 +197,26 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Cloud Managed validation failed for %s", user_input[CONF_HOST])
                 errors["base"] = "cannot_connect"
         return self.async_show_form(step_id="cloud_managed", data_schema=NWA50AX_SCHEMA, errors=errors)
+
+    async def async_step_ex3301_t0(self, user_input=None):
+        errors = {}
+        if user_input is not None:
+            data = {
+                CONF_DEVICE_TYPE: "ex3301_t0",
+                CONF_HOST: user_input[CONF_HOST],
+                CONF_USERNAME: user_input[CONF_USERNAME],
+                CONF_PASSWORD: user_input[CONF_PASSWORD],
+            }
+            try:
+                info = await _validate_connection(self.hass, data)
+                data["model"] = info.get("model")
+                return self.async_create_entry(title=info["title"], data=data)
+            except ConfigEntryAuthFailed:
+                errors["base"] = "invalid_auth"
+            except Exception:
+                _LOGGER.exception("EX3301-T0 validation failed for %s", user_input[CONF_HOST])
+                errors["base"] = "cannot_connect"
+        return self.async_show_form(step_id="ex3301_t0", data_schema=LEGACY_SCHEMA, errors=errors)
 
     async def async_step_locally_managed(self, user_input=None):
         errors = {}
