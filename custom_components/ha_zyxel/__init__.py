@@ -9,7 +9,7 @@ from homeassistant.components import frontend
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
@@ -75,44 +75,48 @@ def _zyxel_dashboard_config(device_cards: list[dict[str, object]]) -> dict:
 def _device_title(entry) -> str:
     if entry is None:
         return "Zyxel Device"
-    if entry.model:
-        return entry.model
-    if entry.name_by_user:
-        return entry.name_by_user
-    if entry.name:
-        return entry.name
+    if entry.get("model"):
+        return entry["model"]
+    if entry.get("title"):
+        return entry["title"]
     return "Zyxel Device"
 
 
 def _dashboard_device_cards(hass: HomeAssistant) -> list[dict[str, object]]:
     entity_registry = er.async_get(hass)
-    device_registry = dr.async_get(hass)
-    grouped: dict[str, list[str]] = {}
+    grouped: dict[str, dict[str, object]] = {}
     for entity in entity_registry.entities.values():
         if entity.platform != DOMAIN:
             continue
         if not entity.entity_id.startswith(ZYXEL_ENTITY_PREFIXES):
             continue
-        if not entity.device_id:
+        if not entity.config_entry_id:
             continue
-        grouped.setdefault(entity.device_id, []).append(entity.entity_id)
+        entry = hass.config_entries.async_get_entry(entity.config_entry_id)
+        if entry is None:
+            continue
+        bucket = grouped.setdefault(
+            entity.config_entry_id,
+            {"title": _device_title({"title": entry.title, "model": entry.data.get("model")}), "entities": []},
+        )
+        bucket["entities"].append(entity.entity_id)
 
     cards: list[dict[str, object]] = []
-    for device_id in sorted(grouped):
-        device = device_registry.devices.get(device_id)
+    for config_entry_id in sorted(grouped):
+        bucket = grouped[config_entry_id]
         cards.append(
             {
                 "type": "grid",
                 "cards": [
                     {
                         "type": "heading",
-                        "heading": _device_title(device),
+                        "heading": bucket["title"],
                         "heading_style": "subtitle",
                         "icon": "mdi:access-point",
                     },
                     {
                         "type": "entities",
-                        "entities": sorted(grouped[device_id]),
+                        "entities": sorted(bucket["entities"]),
                     },
                 ],
             }
