@@ -245,6 +245,11 @@ class EX3301T0Client:
         "DAL?oid=lan",
         "DAL?oid=lanhosts",
     )
+    _CORE_ENDPOINTS = (
+        "MenuList",
+        "CardInfo",
+        "DAL?oid=lan",
+    )
 
     def __init__(self, host: str, username: str, password: str, timeout: int = 15) -> None:
         self.host = host.rstrip("/")
@@ -404,7 +409,19 @@ class EX3301T0Client:
         return response
 
     def _probe(self, endpoint: str) -> dict | str | None:
-        resp = self._request(endpoint)
+        try:
+            resp = self._request(endpoint)
+        except requests.exceptions.ReadTimeout:
+            _LOGGER.warning("EX3301-T0 probe timed out for %s on %s", endpoint, self.host)
+            return None
+        except requests.exceptions.RequestException as err:
+            _LOGGER.warning(
+                "EX3301-T0 probe request failed for %s on %s: %s",
+                endpoint,
+                self.host,
+                err,
+            )
+            return None
         _LOGGER.debug("EX3301-T0 probe %s status=%s url=%s", endpoint, resp.status_code, resp.url)
         text = resp.text.strip()
         if not text:
@@ -445,12 +462,15 @@ class EX3301T0Client:
 
     def get_status(self) -> dict:
         data: dict[str, object] = {}
+        has_core_payload = False
         for endpoint in self._ENDPOINTS:
             payload = self._probe(endpoint)
             if payload is not None:
                 data[endpoint] = payload
-        if not data:
-            raise UpdateFailed("EX3301-T0 returned no usable CGI payloads")
+                if endpoint in self._CORE_ENDPOINTS:
+                    has_core_payload = True
+        if not has_core_payload:
+            raise UpdateFailed("EX3301-T0 returned no usable core CGI payloads")
         return data
 
     def get_device_name(self, status: Mapping) -> str | None:
