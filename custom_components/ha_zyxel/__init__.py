@@ -8,6 +8,7 @@ import async_timeout
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
@@ -31,9 +32,10 @@ ZyXEL_DASHBOARD_ID = "zyxel-nebula"
 ZyXEL_DASHBOARD_STORAGE_KEY = f"lovelace.{ZyXEL_DASHBOARD_ID}"
 ZyXEL_DASHBOARDS_STORAGE_KEY = "lovelace_dashboards"
 ZyXEL_DASHBOARD_URL_PATH = "zyxel-nebula"
+ZYXEL_ENTITY_PREFIXES = ("sensor.", "button.")
 
 
-def _zyxel_dashboard_config(title: str) -> dict:
+def _zyxel_dashboard_config(title: str, entity_rows: list[str]) -> dict:
     return {
         "config": {
             "title": title,
@@ -48,7 +50,22 @@ def _zyxel_dashboard_config(title: str) -> dict:
                         {
                             "type": "grid",
                             "cards": [
-                                {"type": "heading", "heading": title, "heading_style": "title", "icon": "mdi:cloud-outline"},
+                                {
+                                    "type": "heading",
+                                    "heading": title,
+                                    "heading_style": "title",
+                                    "icon": "mdi:cloud-outline",
+                                },
+                            ],
+                        },
+                        {
+                            "type": "grid",
+                            "cards": [
+                                {
+                                    "type": "entities",
+                                    "title": "All Zyxel devices",
+                                    "entities": entity_rows,
+                                },
                             ],
                         }
                     ],
@@ -56,6 +73,18 @@ def _zyxel_dashboard_config(title: str) -> dict:
             ],
         }
     }
+
+
+def _dashboard_entity_entries(hass: HomeAssistant) -> list[str]:
+    registry = er.async_get(hass)
+    entries: list[str] = []
+    for entity in registry.entities.values():
+        if entity.platform != DOMAIN:
+            continue
+        if not entity.entity_id.startswith(ZYXEL_ENTITY_PREFIXES):
+            continue
+        entries.append(entity.entity_id)
+    return sorted(entries)
 
 
 async def _ensure_zyxel_dashboard(hass: HomeAssistant, title: str) -> None:
@@ -78,7 +107,9 @@ async def _ensure_zyxel_dashboard(hass: HomeAssistant, title: str) -> None:
         await dashboards_store.async_save(dashboards_data)
 
     dashboard_store = Store[dict[str, object]](hass, 1, ZyXEL_DASHBOARD_STORAGE_KEY)
-    await dashboard_store.async_save(_zyxel_dashboard_config(title))
+    await dashboard_store.async_save(
+        _zyxel_dashboard_config(title, _dashboard_entity_entries(hass))
+    )
 
 
 def _flatten_value(value, parent_key: str = "") -> dict:
