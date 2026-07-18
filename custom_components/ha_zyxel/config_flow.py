@@ -13,6 +13,7 @@ from .const import (
     CONF_DEVICE_TYPE,
     DEFAULT_DEVICE_TYPE,
     DEFAULT_HOST,
+    DEFAULT_NAME,
     DEFAULT_USERNAME,
     DOMAIN,
 )
@@ -119,7 +120,7 @@ async def _validate_connection(hass: core.HomeAssistant, data):
                 device_name = None
 
             data[CONF_HOST] = host if device_type == "nwa50ax" else candidate
-            title = device_name or f"Zyxel device: ({data[CONF_HOST]})"
+            title = device_name or DEFAULT_NAME
             return {"title": title}
         except UpdateFailed as ex:
             last_error = ex
