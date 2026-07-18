@@ -46,12 +46,7 @@ class NWA50AXClient:
         )
         self._session.verify = False
         page = self._session.get(f"{self.host}/", timeout=self.timeout)
-        _LOGGER.debug(
-            "NWA50AX login page status=%s url=%s body=%s",
-            page.status_code,
-            page.url,
-            page.text[:500],
-        )
+        _LOGGER.debug("NWA50AX login page status=%s url=%s", page.status_code, page.url)
         if page.status_code >= 500:
             _LOGGER.debug("NWA50AX login page returned %s; continuing to POST login", page.status_code)
         csrf_token = (
@@ -81,12 +76,7 @@ class NWA50AXClient:
                     "NWA50AX login POST returned %s; checking body/cookies instead of failing hard",
                     resp.status_code,
                 )
-            _LOGGER.debug(
-                "NWA50AX login response status=%s url=%s body=%s",
-                resp.status_code,
-                resp.url,
-                resp.text[:500],
-            )
+            _LOGGER.debug("NWA50AX login response status=%s url=%s", resp.status_code, resp.url)
             if "login" in resp.text.lower() and "fail" in resp.text.lower():
                 continue
             if "invalid" in resp.text.lower() and "password" in resp.text.lower():
@@ -116,13 +106,7 @@ class NWA50AXClient:
             timeout=self.timeout,
         )
         if resp.status_code >= 400:
-            _LOGGER.debug(
-                "NWA50AX zysh-cgi returned %s for %s body=%s",
-                resp.status_code,
-                cmds[0],
-                resp.text[:500],
-            )
-        _LOGGER.debug("NWA50AX cmd response for %s: %s", cmds[0], resp.text[:500])
+            _LOGGER.debug("NWA50AX zysh-cgi returned %s for %s", resp.status_code, cmds[0])
         return self._parse_zysh_response(resp.text)
 
     @staticmethod
@@ -166,7 +150,6 @@ class NWA50AXClient:
                 except (SyntaxError, ValueError):
                     continue
         if not result:
-            _LOGGER.debug("Unparsed zysh-cgi response body: %s", text[:2000])
             raise UpdateFailed(f"zysh-cgi returned no usable data: {text[:120]}")
         return result
 
