@@ -195,6 +195,8 @@ async def async_setup_entry(
     # Process all keys in the JSON and create sensors for them
     # We'll use a flat structure for simplicity
     for key, value in _flatten_dict(coordinator.data).items():
+        if key.lower() in {"language", "language_setting", "show language setting"}:
+            continue
         # Skip non-scalar values
         if not _is_value_scalar(value):
             continue
@@ -237,9 +239,9 @@ class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{entry.entry_id}_{key}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
-            name=f"Zyxel ({entry.data['host']})",
+            name=entry.title,
             manufacturer="Zyxel",
-            model="",
+            model=entry.data.get("device_type", "Zyxel"),
         )
 
     @property

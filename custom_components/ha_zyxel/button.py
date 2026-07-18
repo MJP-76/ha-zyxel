@@ -29,9 +29,9 @@ class ZyxelRebootButton(ButtonEntity):
         self._attr_unique_id = f"{entry.entry_id}_reboot"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
-            name=f"Zyxel ({entry.data['host']})",
+            name=entry.title,
             manufacturer="Zyxel",
-            model="",
+            model=entry.data.get("device_type", "Zyxel"),
         )
         self._attr_icon = "mdi:restart"
         self._attr_name = "Zyxel Reboot Device"
