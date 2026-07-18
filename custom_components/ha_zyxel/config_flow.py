@@ -23,7 +23,6 @@ nr7101_logger = logging.getLogger("nr7101.nr7101")
 nr7101_logger.setLevel(logging.WARNING)
 
 DEVICE_CHOICES = [
-    {"value": "auto_discovered", "label": "Auto-discovered Zyxel"},
     {"value": "generic", "label": "Generic Zyxel Device"},
     {"value": "ax7501-b0", "label": "AX7501-B0"},
     {"value": "fwa505", "label": "FWA505"},
@@ -181,61 +180,15 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
     CONNECTION_CLASS = config_entries.CONN_CLASS_LOCAL_POLL
 
-    def __init__(self) -> None:
-        super().__init__()
-        self._discovered_host: str | None = None
-
     async def async_step_user(self, user_input=None):
         if user_input is not None:
             self._device_type = user_input[CONF_DEVICE_TYPE]
-            if self._device_type == "auto_discovered":
-                return await self.async_step_auto_discovered()
             if self._device_type == "nwa50ax":
                 return await self.async_step_nwa50ax()
             if self._device_type == "ex3301_t0":
                 return await self.async_step_ex3301_t0()
             return await self.async_step_legacy()
         return self.async_show_form(step_id="user", data_schema=SELECT_SCHEMA)
-
-    async def async_step_ssdp(self, discovery_info):
-        host = _discovery_host(discovery_info)
-        server = ""
-        if isinstance(discovery_info, dict):
-            server = str(discovery_info.get("ssdp_server", "")).lower()
-        else:
-            server = str(getattr(discovery_info, "ssdp_server", "")).lower()
-        if host and ("zyxel" in server or "igd" in server or "upnp" in server):
-            self._discovered_host = host
-            self._device_type = "auto_discovered"
-            return await self.async_step_auto_discovered()
-        return self.async_abort(reason="not_supported")
-
-    async def async_step_auto_discovered(self, user_input=None):
-        if user_input is not None:
-            self._discovered_host = _normalize_host(user_input[CONF_HOST])
-            self._device_type = user_input[CONF_DEVICE_TYPE]
-            if self._device_type == "nwa50ax":
-                return await self.async_step_nwa50ax()
-            if self._device_type == "ex3301_t0":
-                return await self.async_step_ex3301_t0()
-            return await self.async_step_legacy()
-
-        auto_schema = vol.Schema(
-            {
-                vol.Required(CONF_DEVICE_TYPE, default="ex3301_t0"): SelectSelector(
-                    SelectSelectorConfig(
-                        options=[
-                            {"value": "ex3301_t0", "label": "EX3301-T0 Router"},
-                            {"value": "nwa50ax", "label": "NWA50AX AP"},
-                            {"value": "legacy", "label": "Legacy Zyxel Router"},
-                        ],
-                        mode=SelectSelectorMode.LIST,
-                    )
-                ),
-                vol.Required(CONF_HOST, default=self._discovered_host or ""): str,
-            }
-        )
-        return self.async_show_form(step_id="auto_discovered", data_schema=auto_schema)
 
     async def async_step_nwa50ax(self, user_input=None):
         errors = {}
@@ -272,17 +225,13 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self.async_create_entry(title=info["title"], data=data)
             except ConfigEntryAuthFailed:
                 errors["base"] = "invalid_auth"
-            except Exception:  # pylint: disable=broad-except
-                _LOGGER.exception("EX3301-T0 validation failed for %s", user_input[CONF_HOST])
+            except Exception as ex:  # pylint: disable=broad-except
+                if _is_connection_refused(ex):
+                    _LOGGER.debug("EX3301-T0 connection refused for %s", user_input[CONF_HOST])
+                else:
+                    _LOGGER.exception("EX3301-T0 validation failed for %s", user_input[CONF_HOST])
                 errors["base"] = "cannot_connect"
-        schema = vol.Schema(
-            {
-                vol.Required(CONF_HOST, default=self._discovered_host or ""): str,
-                vol.Required(CONF_USERNAME, default=DEFAULT_USERNAME): str,
-                vol.Required(CONF_PASSWORD): str,
-            }
-        )
-        return self.async_show_form(step_id="ex3301_t0", data_schema=schema, errors=errors)
+        return self.async_show_form(step_id="ex3301_t0", data_schema=EX3301T0_SCHEMA, errors=errors)
 
     async def async_step_legacy(self, user_input=None):
         errors = {}
@@ -298,8 +247,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self.async_create_entry(title=info["title"], data=data)
             except ConfigEntryAuthFailed:
                 errors["base"] = "invalid_auth"
-            except Exception:  # pylint: disable=broad-except
-                _LOGGER.exception("Legacy validation failed for %s", user_input[CONF_HOST])
+            except Exception as ex:  # pylint: disable=broad-except
+                if _is_connection_refused(ex):
+                    _LOGGER.debug("Legacy connection refused for %s", user_input[CONF_HOST])
+                else:
+                    _LOGGER.exception("Legacy validation failed for %s", user_input[CONF_HOST])
                 errors["base"] = "cannot_connect"
         return self.async_show_form(step_id="legacy", data_schema=LEGACY_SCHEMA, errors=errors)
 
