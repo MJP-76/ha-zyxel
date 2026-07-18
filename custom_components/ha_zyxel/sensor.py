@@ -233,6 +233,7 @@ class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
         """Initialize the sensor."""
         super().__init__(coordinator)
         self._key = key
+        self._flat_state: dict[str, Any] = {}
         self._attr_unique_id = f"{entry.entry_id}_{key}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
@@ -247,17 +248,12 @@ class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
         if not self.coordinator.last_update_success:
             return False
 
-        # Check if the key exists in the data
-        try:
-            self._get_value_from_path()
-            return True
-        except (KeyError, AttributeError, TypeError, IndexError, ValueError):
-            return False
+        return self._key in self._flat_state
 
     def _get_value_from_path(self) -> Any:
-        """Get a value from the flattened coordinator data."""
-        flattened = _flatten_dict(self.coordinator.data)
-        return flattened[self._key]
+        """Get a value from the cached flattened coordinator data."""
+        self._flat_state = _flatten_dict(self.coordinator.data)
+        return self._flat_state[self._key]
 
 
 class ConfiguredZyxelSensor(AbstractZyxelSensor):

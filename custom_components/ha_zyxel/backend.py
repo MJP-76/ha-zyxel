@@ -185,32 +185,28 @@ class NWA50AXClient:
     @staticmethod
     def get_device_name(status: Mapping) -> str | None:
         """Return the best device name we can find in zysh status data."""
-        candidates = (
-            "fqdn",
-            "_fqdn",
-            "hostname",
-            "_hostname",
-            "system_name",
-            "_system_name",
-            "device_name",
-            "_device_name",
-        )
-        for key in candidates:
-            value = status.get(key)
-            if isinstance(value, str) and value.strip():
-                return value.strip()
+        def _search(node: Mapping | list | str | object) -> str | None:
+            if isinstance(node, str):
+                return node.strip() or None
+            if isinstance(node, Mapping):
+                for key, value in node.items():
+                    key_lower = key.lower() if isinstance(key, str) else ""
+                    if any(token in key_lower for token in ("fqdn", "hostname", "system_name", "device_name")):
+                        if isinstance(value, str) and value.strip():
+                            return value.strip()
+                    nested = _search(value)
+                    if nested:
+                        return nested
+            if isinstance(node, list):
+                for item in node:
+                    nested = _search(item)
+                    if nested:
+                        return nested
+            return None
 
-        for value in status.values():
-            if isinstance(value, Mapping):
-                nested = NWA50AXClient.get_device_name(value)
-                if nested:
-                    return nested
-            if isinstance(value, list):
-                for item in value:
-                    if isinstance(item, Mapping):
-                        nested = NWA50AXClient.get_device_name(item)
-                        if nested:
-                            return nested
+        name = _search(status)
+        if name:
+            return name
         return None
 
     def reboot(self) -> None:
