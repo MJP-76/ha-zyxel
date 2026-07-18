@@ -251,7 +251,7 @@ class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
         try:
             self._get_value_from_path()
             return True
-        except (KeyError, AttributeError):
+        except (KeyError, AttributeError, TypeError, IndexError, ValueError):
             return False
 
     def _get_value_from_path(self) -> Any:
@@ -259,7 +259,10 @@ class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
         keys = self._key.split(".")
         value = self.coordinator.data
         for k in keys:
-            value = value[k]
+            if isinstance(value, list):
+                value = value[int(k)]
+            else:
+                value = value[k]
         return value
 
 
@@ -281,7 +284,7 @@ class ConfiguredZyxelSensor(AbstractZyxelSensor):
         """Return the state of the sensor."""
         try:
             return self._get_value_from_path()
-        except (KeyError, AttributeError):
+        except (KeyError, AttributeError, TypeError, IndexError, ValueError):
             return None
 
 
@@ -299,7 +302,7 @@ class GenericZyxelSensor(AbstractZyxelSensor):
         """Return the state of the sensor."""
         try:
             return self._get_value_from_path()
-        except (KeyError, AttributeError):
+        except (KeyError, AttributeError, TypeError, IndexError, ValueError):
             return None
 
     @property
