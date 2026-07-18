@@ -331,7 +331,7 @@ class EX3301T0Client:
             timeout=self.timeout,
             allow_redirects=False,
         )
-        key_data = key_resp.json()
+        key_data = self._safe_json(key_resp, "EX3301-T0 RSA key request")
         public_key = key_data["RSAPublicKey"]
         login_payload = self._encrypt_login_payload(public_key)
         resp = self._session.post(
@@ -345,7 +345,7 @@ class EX3301T0Client:
             _LOGGER.debug("EX3301-T0 login redirected to %s", resp.headers.get("Location"))
         elif not resp.ok:
             raise UpdateFailed("EX3301-T0 login failed")
-        body = resp.json()
+        body = self._safe_json(resp, "EX3301-T0 login")
         if "content" in body and "iv" in body:
             decrypted = self._aes_decrypt(body["content"], self._aes_key or "", body["iv"])
             data = json.loads(decrypted)
@@ -387,6 +387,17 @@ class EX3301T0Client:
             return json.loads(text)
         except json.JSONDecodeError:
             return text
+
+    @staticmethod
+    def _safe_json(resp: requests.Response, context: str) -> dict:
+        try:
+            body = resp.json()
+        except ValueError as err:
+            snippet = resp.text.strip().replace("\n", " ")
+            raise UpdateFailed(f"{context} returned non-JSON response: {snippet[:120]}") from err
+        if not isinstance(body, dict):
+            raise UpdateFailed(f"{context} returned an unexpected response shape")
+        return body
 
     @staticmethod
     def _extract_jsonish_blob(blob: str) -> dict | list | str | None:
