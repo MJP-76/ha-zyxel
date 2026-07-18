@@ -217,6 +217,47 @@ def _should_skip_sensor_label(label: str) -> bool:
     }
 
 
+ENABLED_SENSOR_KEYS = {
+    "firmware_version",
+    "nebula_claim_status",
+    "nebula_cloud_status",
+    "ip_status",
+    "serial_number",
+    "slot.1.profile",
+    "slot.0.profile",
+    "model",
+    "mac_address.1",
+    "mac_address.0",
+    "mode",
+    "host_name",
+    "slot2",
+    "slot.0.band",
+    "ip_address",
+    "slot1",
+    "slot.1.wlantransmittedbyte",
+    "slot.1.wlanreceivedbyte",
+    "slot.0.wlanreceivedbyte",
+    "slot.0.wlantransmittedbyte",
+    "slot.1.fcserrorcount",
+    "slot.1.receivedpktcount",
+    "slot.0.receivedpktcount",
+    "slot.1.transmittedpktcount",
+    "slot.0.fcserrorcount",
+    "slot.0.transmittedpktcount",
+    "build_date",
+    "slot.1.channel_utilization",
+    "slot.1.txpower",
+    "slot.0.txpower",
+    "slot.0.channel_utilization",
+    "active",
+    "ipv6_enable",
+    "slot.0.activate",
+    "slot.1.activate",
+    "vlan_tag",
+    "vlan_id",
+}
+
+
 def _canonical_sensor_key(key: str) -> str:
     """Normalize keys so repeated zysh blocks collapse to one entity."""
     parts = [part for part in key.split(".") if part]
@@ -224,20 +265,6 @@ def _canonical_sensor_key(key: str) -> str:
     for part in parts:
         lowered = part.lower()
         if lowered.startswith("zyshdata"):
-            continue
-        if lowered in {
-            "model",
-            "model_name",
-            "system_name",
-            "hostname",
-            "fqdn",
-            "device_name",
-            "name",
-            "language",
-            "current_language",
-            "serial_number",
-            "modelname",
-        }:
             continue
         normalized.append(lowered)
     return ".".join(normalized)
@@ -261,6 +288,8 @@ async def async_setup_entry(
         canonical_key = _canonical_sensor_key(key)
         if not canonical_key:
             continue
+        # Keep entities around, but only enable the curated set by default.
+        enabled_default = canonical_key in ENABLED_SENSOR_KEYS
         if canonical_key in seen_keys:
             continue
         seen_keys.add(canonical_key)
@@ -278,7 +307,8 @@ async def async_setup_entry(
                     coordinator,
                     entry,
                     key,
-                    sensor_config
+                    sensor_config,
+                    enabled_default,
                 )
             )
         else:
@@ -287,7 +317,8 @@ async def async_setup_entry(
                 GenericZyxelSensor(
                     coordinator,
                     entry,
-                    key
+                    key,
+                    enabled_default,
                 )
             )
 
@@ -298,7 +329,7 @@ async def async_setup_entry(
 class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
     """Base class for Zyxel device sensors."""
 
-    def __init__(self, coordinator, entry: ConfigEntry, key: str):
+    def __init__(self, coordinator, entry: ConfigEntry, key: str, enabled_default: bool):
         """Initialize the sensor."""
         super().__init__(coordinator)
         self._key = key
@@ -310,7 +341,7 @@ class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
             manufacturer="Zyxel",
             model=entry.data.get("model") or "Zyxel",
         )
-        self._attr_entity_registry_enabled_default = not _should_skip_sensor_label(key)
+        self._attr_entity_registry_enabled_default = enabled_default
 
     @property
     def available(self) -> bool:
@@ -328,9 +359,9 @@ class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
 class ConfiguredZyxelSensor(AbstractZyxelSensor):
     """Representation of a configured Zyxel sensor."""
 
-    def __init__(self, coordinator, entry: ConfigEntry, key: str, config: dict):
+    def __init__(self, coordinator, entry: ConfigEntry, key: str, config: dict, enabled_default: bool):
         """Initialize the sensor."""
-        super().__init__(coordinator, entry, key)
+        super().__init__(coordinator, entry, key, enabled_default)
         self._config = config
         self._attr_name = f"Zyxel {config['name']}"
         self._attr_native_unit_of_measurement = config["unit"]
@@ -349,6 +380,9 @@ class ConfiguredZyxelSensor(AbstractZyxelSensor):
 
 class GenericZyxelSensor(AbstractZyxelSensor):
     """Representation of a generic Zyxel sensor."""
+
+    def __init__(self, coordinator, entry: ConfigEntry, key: str, enabled_default: bool):
+        super().__init__(coordinator, entry, key, enabled_default)
 
     @property
     def name(self):
