@@ -23,24 +23,8 @@ nr7101_logger = logging.getLogger("nr7101.nr7101")
 nr7101_logger.setLevel(logging.WARNING)
 
 DEVICE_CHOICES = [
-    {"value": "generic", "label": "Generic Zyxel Device"},
-    {"value": "ax7501-b0", "label": "AX7501-B0"},
-    {"value": "fwa505", "label": "FWA505"},
-    {"value": "fwa510", "label": "FWA510"},
-    {"value": "fwa710-5g-v2", "label": "FWA710 5G V2"},
-    {"value": "lte3202-m437", "label": "LTE3202-M437"},
-    {"value": "lte7490-m904", "label": "LTE7490-M904"},
-    {"value": "lte5398-m904", "label": "LTE5398-M904"},
-    {"value": "nr5103e", "label": "NR5103E"},
-    {"value": "nr5103v2", "label": "NR5103v2"},
-    {"value": "nr5307", "label": "NR5307"},
-    {"value": "nr7101", "label": "NR7101"},
-    {"value": "nr7102", "label": "NR7102"},
-    {"value": "nr7302", "label": "NR7302"},
-    {"value": "nwa50ax", "label": "NWA50AX AP"},
-    {"value": "vmg3625-t50b", "label": "VMG3625-T50B"},
-    {"value": "vmg4005-b50a", "label": "VMG4005-B50A"},
-    {"value": "vmg8825-t50", "label": "VMG8825-T50"},
+    {"value": "legacy", "label": "Locally Managed"},
+    {"value": "nwa50ax", "label": "Cloud Managed"},
 ]
 
 SELECT_SCHEMA = vol.Schema(
@@ -145,11 +129,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             self._device_type = user_input[CONF_DEVICE_TYPE]
             if self._device_type == "nwa50ax":
-                return await self.async_step_nwa50ax()
-            return await self.async_step_legacy()
+                return await self.async_step_cloud_managed()
+            return await self.async_step_locally_managed()
         return self.async_show_form(step_id="user", data_schema=SELECT_SCHEMA)
 
-    async def async_step_nwa50ax(self, user_input=None):
+    async def async_step_cloud_managed(self, user_input=None):
         errors = {}
         if user_input is not None:
             data = {
@@ -166,15 +150,15 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except ConfigEntryAuthFailed:
                 errors["base"] = "invalid_auth"
             except Exception:  # pylint: disable=broad-except
-                _LOGGER.exception("NWA50AX validation failed for %s", user_input[CONF_HOST])
+                _LOGGER.exception("Cloud Managed validation failed for %s", user_input[CONF_HOST])
                 errors["base"] = "cannot_connect"
-        return self.async_show_form(step_id="nwa50ax", data_schema=NWA50AX_SCHEMA, errors=errors)
+        return self.async_show_form(step_id="cloud_managed", data_schema=NWA50AX_SCHEMA, errors=errors)
 
-    async def async_step_legacy(self, user_input=None):
+    async def async_step_locally_managed(self, user_input=None):
         errors = {}
         if user_input is not None:
             data = {
-                CONF_DEVICE_TYPE: getattr(self, "_device_type", "legacy"),
+                CONF_DEVICE_TYPE: "legacy",
                 CONF_HOST: user_input[CONF_HOST],
                 CONF_USERNAME: user_input[CONF_USERNAME],
                 CONF_PASSWORD: user_input[CONF_PASSWORD],
@@ -185,9 +169,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             except ConfigEntryAuthFailed:
                 errors["base"] = "invalid_auth"
             except Exception:  # pylint: disable=broad-except
-                _LOGGER.exception("Legacy validation failed for %s", user_input[CONF_HOST])
+                _LOGGER.exception("Locally Managed validation failed for %s", user_input[CONF_HOST])
                 errors["base"] = "cannot_connect"
-        return self.async_show_form(step_id="legacy", data_schema=LEGACY_SCHEMA, errors=errors)
+        return self.async_show_form(step_id="locally_managed", data_schema=LEGACY_SCHEMA, errors=errors)
 
 
 class ConnectionError(exceptions.HomeAssistantError):
