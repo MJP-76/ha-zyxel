@@ -22,8 +22,8 @@
       },
       "legacy": {
         "data": {
-          "host": "Hôte",
-          "username": "Nom d'utilisateur (habituellement 'admin')",
+          "host": "Adresse IP",
+          "username": "Nom d'utilisateur",
           "password": "Mot de passe"
         }
       }
