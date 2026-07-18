@@ -92,6 +92,8 @@ def _dashboard_device_cards(hass: HomeAssistant) -> list[dict[str, object]]:
             continue
         if not entity.config_entry_id:
             continue
+        if entity.disabled_by is not None:
+            continue
         entry = hass.config_entries.async_get_entry(entity.config_entry_id)
         if entry is None:
             continue
