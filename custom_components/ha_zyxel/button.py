@@ -29,7 +29,7 @@ class ZyxelRebootButton(ButtonEntity):
         self._attr_unique_id = f"{entry.entry_id}_reboot"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
-            name=entry.title,
+            name=entry.data.get("model") or entry.title,
             manufacturer="Zyxel",
             model=entry.data.get("model") or "Zyxel",
         )

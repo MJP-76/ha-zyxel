@@ -102,7 +102,7 @@ def _dashboard_device_cards(hass: HomeAssistant) -> list[dict[str, object]]:
         bucket = type_group.setdefault(
             entity.config_entry_id,
             {
-                "title": _device_title({"title": entry.title, "model": entry.data.get("model")}),
+                "title": entry.data.get("model") or entry.title,
                 "entities": [],
             },
         )
