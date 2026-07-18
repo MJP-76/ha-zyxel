@@ -170,6 +170,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }
             try:
                 info = await _validate_connection(self.hass, data)
+                data["model"] = info.get("model")
                 self._validated_data = data
                 self._validated_info = info
                 return self.async_create_entry(title=info["title"], data=data)
@@ -191,6 +192,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             }
             try:
                 info = await _validate_connection(self.hass, data)
+                data["model"] = info.get("model")
                 return self.async_create_entry(title=info["title"], data=data)
             except ConfigEntryAuthFailed:
                 errors["base"] = "invalid_auth"
