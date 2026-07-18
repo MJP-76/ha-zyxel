@@ -234,6 +234,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self.async_create_entry(title=info["title"], data=data)
             except ConfigEntryAuthFailed:
                 errors["base"] = "invalid_auth"
+            except UpdateFailed:
+                _LOGGER.exception("EX3301-T0 validation failed for %s", user_input[CONF_HOST])
+                errors["base"] = "cannot_connect"
             except Exception as ex:  # pylint: disable=broad-except
                 if _is_connection_refused(ex):
                     _LOGGER.debug("EX3301-T0 connection refused for %s", user_input[CONF_HOST])
