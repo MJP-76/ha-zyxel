@@ -2,6 +2,7 @@
 import logging
 
 import voluptuous as vol
+import requests
 from homeassistant import config_entries, core, exceptions
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
@@ -91,8 +92,14 @@ def _safe_error_message(err: Exception) -> str:
 
 
 def _is_connection_refused(err: Exception) -> bool:
+    if isinstance(err, requests.exceptions.ConnectionError):
+        return True
     message = _safe_error_message(err).lower()
-    return "connection refused" in message or "failed to establish a new connection" in message
+    return (
+        "connection refused" in message
+        or "failed to establish a new connection" in message
+        or "max retries exceeded" in message
+    )
 
 
 def _discovery_host(discovery_info) -> str | None:
