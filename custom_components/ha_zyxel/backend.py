@@ -5,9 +5,16 @@ import ast
 import json
 import logging
 import re
+from base64 import b64decode, b64encode
 from collections.abc import Mapping
+from hashlib import sha512
+from secrets import token_bytes
 
 import requests
+from cryptography.hazmat.primitives import hashes, padding
+from cryptography.hazmat.primitives.asymmetric import padding as asym_padding
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.serialization import load_pem_public_key
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
@@ -225,6 +232,197 @@ class NWA50AXClient:
 
     def reboot(self) -> None:
         self._post_cmds(["reboot"])
+
+
+class EX3301T0Client:
+    """Probe Zyxel EX3301-T0 stock firmware CGI endpoints."""
+
+    _ENDPOINTS = (
+        "UserLoginCheck",
+        "loginAccountLevel",
+        "MenuList",
+        "CardInfo",
+        "DAL?oid=cardpage_status",
+        "DAL?oid=lan",
+        "DAL?oid=lanhosts",
+    )
+
+    def __init__(self, host: str, username: str, password: str, timeout: int = 15) -> None:
+        self.host = host.rstrip("/")
+        self.username = username
+        self.password = password
+        self.timeout = timeout
+        self._session = requests.Session()
+        self._session.headers.update(
+            {
+                "User-Agent": "Mozilla/5.0",
+                "X-Requested-With": "XMLHttpRequest",
+                "Origin": self.host,
+                "Referer": f"{self.host}/",
+            }
+        )
+        self._session.verify = False
+        self._aes_key: str | None = None
+        self._csrf_token: str | None = None
+
+    @staticmethod
+    def _aes_encrypt(plaintext: str, key_b64: str, iv_b64: str) -> str:
+        key = b64decode(key_b64)
+        iv = b64decode(iv_b64)
+        padder = padding.PKCS7(128).padder()
+        padded = padder.update(plaintext.encode("utf-8")) + padder.finalize()
+        cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
+        encryptor = cipher.encryptor()
+        ciphertext = encryptor.update(padded) + encryptor.finalize()
+        return b64encode(ciphertext).decode("ascii")
+
+    @staticmethod
+    def _aes_decrypt(ciphertext_b64: str, key_b64: str, iv_b64: str) -> str:
+        key = b64decode(key_b64)
+        iv = b64decode(iv_b64)
+        cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
+        decryptor = cipher.decryptor()
+        plaintext = decryptor.update(b64decode(ciphertext_b64)) + decryptor.finalize()
+        unpadder = padding.PKCS7(128).unpadder()
+        return (unpadder.update(plaintext) + unpadder.finalize()).decode("utf-8")
+
+    def _encrypt_login_payload(self, public_key_pem: str) -> dict[str, str]:
+        aes_key = b64encode(token_bytes(32)).decode("ascii")
+        iv = b64encode(token_bytes(16)).decode("ascii")
+        self._aes_key = aes_key
+        payload = {
+            "Input_Account": self.username,
+            "Input_Passwd": b64encode(self.password.encode("utf-8")).decode("ascii"),
+            "Input_RandomCode": "",
+            "currLang": "en",
+            "RememberPassword": 0,
+            "SHA512_password": sha512(self.password.encode("utf-8")).hexdigest(),
+        }
+        encrypted = self._aes_encrypt(json.dumps(payload, separators=(",", ":")), aes_key, iv)
+        public_key = load_pem_public_key(public_key_pem.encode("utf-8"))
+        encrypted_key = public_key.encrypt(
+            b64decode(aes_key),
+            asym_padding.PKCS1v15(),
+        )
+        return {
+            "content": encrypted,
+            "key": b64encode(encrypted_key).decode("ascii"),
+            "iv": iv,
+        }
+
+    def login(self) -> None:
+        self._session = requests.Session()
+        self._session.headers.update(
+            {
+                "User-Agent": "Mozilla/5.0",
+                "X-Requested-With": "XMLHttpRequest",
+                "Origin": self.host,
+                "Referer": f"{self.host}/",
+            }
+        )
+        self._session.verify = False
+        page = self._session.get(f"{self.host}/", timeout=self.timeout)
+        _LOGGER.debug("EX3301-T0 login page status=%s url=%s", page.status_code, page.url)
+        if page.status_code >= 500:
+            _LOGGER.debug("EX3301-T0 login page returned %s; continuing to probe CGI endpoints", page.status_code)
+
+        key_resp = self._session.get(f"{self.host}/getRSAPublickKey", timeout=self.timeout)
+        key_data = key_resp.json()
+        public_key = key_data["RSAPublicKey"]
+        login_payload = self._encrypt_login_payload(public_key)
+        resp = self._session.post(
+            f"{self.host}/UserLogin",
+            data=json.dumps(login_payload),
+            timeout=self.timeout,
+            allow_redirects=True,
+        )
+        _LOGGER.debug("EX3301-T0 login status=%s url=%s", resp.status_code, resp.url)
+        if not resp.ok:
+            raise UpdateFailed("EX3301-T0 login failed")
+        body = resp.json()
+        if "content" in body and "iv" in body:
+            decrypted = self._aes_decrypt(body["content"], self._aes_key or "", body["iv"])
+            data = json.loads(decrypted)
+        else:
+            data = body
+        session_key = data.get("sessionkey") or data.get("sessionKey")
+        if session_key:
+            self._csrf_token = session_key
+            self._session.headers.update({"CSRFToken": session_key})
+        self._session.cookies.set("zySessionKey", session_key or "", path="/")
+        self._probe("UserLoginCheck")
+
+    def _request(self, endpoint: str, method: str = "get") -> requests.Response:
+        url = f"{self.host}/cgi-bin/{endpoint}"
+        request = getattr(self._session, method.lower())
+        if endpoint.startswith("DAL?"):
+            url = f"{self.host}/cgi-bin/{endpoint}"
+        headers = {}
+        if method.lower() in {"post", "put", "delete"} and self._csrf_token:
+            headers["CSRFToken"] = self._csrf_token
+        return request(url, timeout=self.timeout, allow_redirects=True, headers=headers)
+
+    def _probe(self, endpoint: str) -> dict | str | None:
+        resp = self._request(endpoint)
+        _LOGGER.debug("EX3301-T0 probe %s status=%s url=%s", endpoint, resp.status_code, resp.url)
+        text = resp.text.strip()
+        if not text:
+            return None
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            return text
+
+    @staticmethod
+    def _extract_jsonish_blob(blob: str) -> dict | list | str | None:
+        blob = blob.strip()
+        if not blob:
+            return None
+        for candidate in (blob, blob.replace("\r", "")):
+            try:
+                return json.loads(candidate)
+            except json.JSONDecodeError:
+                continue
+        if blob.startswith("base64:"):
+            try:
+                decoded = b64decode(blob.removeprefix("base64:")).decode("utf-8", "ignore")
+                return json.loads(decoded)
+            except Exception:  # pylint: disable=broad-except
+                return blob
+        return blob
+
+    def get_status(self) -> dict:
+        data: dict[str, object] = {}
+        for endpoint in self._ENDPOINTS:
+            payload = self._probe(endpoint)
+            if payload is not None:
+                data[endpoint] = payload
+        if not data:
+            raise UpdateFailed("EX3301-T0 returned no usable CGI payloads")
+        return data
+
+    def get_device_name(self, status: Mapping) -> str | None:
+        for key in ("MenuList", "CardInfo", "DAL?oid=cardpage_status", "DAL?oid=lan"):
+            value = status.get(key)
+            if isinstance(value, Mapping):
+                for candidate_key in ("systemName", "SystemName", "host_name", "hostname", "device_name"):
+                    candidate = value.get(candidate_key)
+                    if isinstance(candidate, str) and candidate.strip():
+                        return candidate.strip()
+        return None
+
+    def get_device_model(self, status: Mapping) -> str | None:
+        for key in ("CardInfo", "MenuList", "DAL?oid=lan"):
+            value = status.get(key)
+            if isinstance(value, Mapping):
+                for candidate_key in ("model", "Model", "model_name", "device_model"):
+                    candidate = value.get(candidate_key)
+                    if isinstance(candidate, str) and candidate.strip():
+                        return candidate.strip()
+        return None
+
+    def reboot(self) -> None:
+        self._request("UserLoginCheck")
 
 
 def normalize_zysh_status(data: Mapping) -> dict:

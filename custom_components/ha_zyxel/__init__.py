@@ -13,7 +13,7 @@ from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from custom_components.ha_zyxel.backend import NWA50AXClient, normalize_zysh_status
+from custom_components.ha_zyxel.backend import EX3301T0Client, NWA50AXClient, normalize_zysh_status
 from custom_components.ha_zyxel.const import (
     CONF_DEVICE_TYPE,
     CONF_HOST,
@@ -230,6 +230,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             router = NWA50AXClient(host, username, password)
             await hass.async_add_executor_job(router.login)
             await hass.async_add_executor_job(router.get_status)
+        elif device_type == "ex3301_t0":
+            router = EX3301T0Client(host, username, password)
+            await hass.async_add_executor_job(router.login)
+            await hass.async_add_executor_job(router.get_status)
         else:
             router = await hass.async_add_executor_job(
                 nr7101.NR7101, host, username, password, {"timeout": 15}
@@ -243,7 +247,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         try:
             async with async_timeout.timeout(15):
                 def get_all_data():
-                    data = router.get_status() if device_type == "nwa50ax" else _merge_status_data(router)
+                    if device_type == "nwa50ax":
+                        data = router.get_status()
+                    elif device_type == "ex3301_t0":
+                        data = router.get_status()
+                    else:
+                        data = _merge_status_data(router)
                     if not data and device_type != "nwa50ax":
                         legacy_data = router.get_status()
                         if legacy_data:
