@@ -186,29 +186,31 @@ class NWA50AXClient:
     @staticmethod
     def get_device_name(status: Mapping) -> str | None:
         """Return the best device name we can find in zysh status data."""
-        def _search(node: Mapping | list | str | object, preferred: tuple[str, ...]) -> str | None:
-            if isinstance(node, str):
-                candidate = node.strip()
-                if not candidate:
-                    return None
-                lowered = candidate.lower()
-                if lowered.startswith(("http://", "https://")):
-                    return None
-                if _IP_LIKE_RE.match(candidate):
-                    return None
-                return candidate
+        def _clean_candidate(value: object) -> str | None:
+            if not isinstance(value, str):
+                return None
+            candidate = value.strip()
+            if not candidate:
+                return None
+            lowered = candidate.lower()
+            if lowered.startswith(("http://", "https://")):
+                return None
+            if _IP_LIKE_RE.match(candidate):
+                return None
+            return candidate
+
+        def _search(node: Mapping | list | object, preferred: tuple[str, ...]) -> str | None:
             if isinstance(node, Mapping):
                 for key, value in node.items():
                     key_lower = key.lower() if isinstance(key, str) else ""
                     if any(token in key_lower for token in preferred):
-                        if isinstance(value, str) and value.strip():
-                            candidate = value.strip()
-                            if not _IP_LIKE_RE.match(candidate) and not candidate.lower().startswith(("http://", "https://")):
-                                return candidate
+                        candidate = _clean_candidate(value)
+                        if candidate:
+                            return candidate
                     nested = _search(value, preferred)
                     if nested:
                         return nested
-            if isinstance(node, list):
+            elif isinstance(node, list):
                 for item in node:
                     nested = _search(item, preferred)
                     if nested:
