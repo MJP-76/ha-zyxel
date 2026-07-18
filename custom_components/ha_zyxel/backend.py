@@ -350,10 +350,8 @@ class EX3301T0Client:
             if location.startswith("https://"):
                 raise UpdateFailed("EX3301-T0 redirected to HTTPS during login")
         elif not resp.ok:
-            _LOGGER.debug(
-                "EX3301-T0 login returned %s; inspecting body and cookies before failing",
-                resp.status_code,
-            )
+            snippet = resp.text.strip().replace("\n", " ")[:160]
+            raise UpdateFailed(f"EX3301-T0 login returned {resp.status_code}: {snippet}")
         body = self._safe_json(resp, "EX3301-T0 login")
         if "content" in body and "iv" in body:
             decrypted = self._aes_decrypt(body["content"], self._aes_key or "", body["iv"])
