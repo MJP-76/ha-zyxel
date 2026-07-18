@@ -249,8 +249,7 @@ class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
         """Return if entity is available."""
         if not self.coordinator.last_update_success:
             return False
-
-        return self._key in self._flat_state
+        return self._key in _flatten_dict(self.coordinator.data)
 
     def _get_value_from_path(self) -> Any:
         """Get a value from the cached flattened coordinator data."""
