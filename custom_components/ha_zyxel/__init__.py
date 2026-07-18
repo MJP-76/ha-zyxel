@@ -59,6 +59,8 @@ def _zyxel_dashboard_config(device_cards: list[dict[str, object]]) -> dict:
 def _device_title(entry) -> str:
     if entry is None:
         return "Zyxel Device"
+    if entry.model:
+        return entry.model
     if entry.name_by_user:
         return entry.name_by_user
     if entry.name:
@@ -124,17 +126,21 @@ async def _ensure_zyxel_dashboard(hass: HomeAssistant, _entity_rows: list[str]) 
     dashboard_store = Store[dict[str, object]](hass, 1, ZyXEL_DASHBOARD_STORAGE_KEY)
     await dashboard_store.async_save(_zyxel_dashboard_config(_dashboard_device_cards(hass)))
     if not hass.data.get(ZYXEL_DASHBOARD_PANEL_REGISTERED):
-        frontend.async_register_built_in_panel(
-            hass,
-            "lovelace",
-            frontend_url_path=ZyXEL_DASHBOARD_URL_PATH,
-            require_admin=False,
-            show_in_sidebar=True,
-            sidebar_title="Zyxel Devices",
-            sidebar_icon="mdi:cloud",
-            config={"mode": "storage"},
-            update=False,
-        )
+        try:
+            frontend.async_register_built_in_panel(
+                hass,
+                "lovelace",
+                frontend_url_path=ZyXEL_DASHBOARD_URL_PATH,
+                require_admin=False,
+                show_in_sidebar=True,
+                sidebar_title="Zyxel Devices",
+                sidebar_icon="mdi:cloud",
+                config={"mode": "storage"},
+                update=False,
+            )
+        except ValueError as err:
+            if "Overwriting panel" not in str(err):
+                raise
         hass.data[ZYXEL_DASHBOARD_PANEL_REGISTERED] = True
 
 

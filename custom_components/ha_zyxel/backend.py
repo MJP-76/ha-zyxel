@@ -262,7 +262,7 @@ class NWA50AXClient:
         model = _search(status, ("model name", "model_name"))
         if model:
             return model
-        model = _search(status, ("model",))
+        model = _search(status, ("model", "model name"))
         if model:
             return model
         return None
