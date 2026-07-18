@@ -189,6 +189,20 @@ def _canonical_sensor_key(key: str) -> str:
         lowered = part.lower()
         if lowered.startswith("zyshdata"):
             continue
+        if lowered in {
+            "model",
+            "model_name",
+            "system_name",
+            "hostname",
+            "fqdn",
+            "device_name",
+            "name",
+            "language",
+            "current_language",
+            "serial_number",
+            "modelname",
+        }:
+            continue
         normalized.append(lowered)
     return ".".join(normalized)
 
@@ -209,10 +223,26 @@ async def async_setup_entry(
     # We'll use a flat structure for simplicity
     for key, value in _flatten_dict(coordinator.data).items():
         canonical_key = _canonical_sensor_key(key)
+        if not canonical_key:
+            continue
         if canonical_key in seen_keys:
             continue
         seen_keys.add(canonical_key)
-        if key.lower() in {"language", "language_setting", "show language setting"}:
+        if key.lower() in {
+            "language",
+            "language_setting",
+            "show language setting",
+            "_model",
+            "model",
+            "_name",
+            "name",
+            "_system_name",
+            "system_name",
+            "_fqdn",
+            "fqdn",
+            "_hostname",
+            "hostname",
+        }:
             continue
         # Skip non-scalar values
         if not _is_value_scalar(value):
