@@ -147,10 +147,19 @@ async def _validate_connection(hass: core.HomeAssistant, data):
             elif device_type == "ex3301_t0":
                 router = EX3301T0Client(candidate, data[CONF_USERNAME], data[CONF_PASSWORD])
                 await hass.async_add_executor_job(router.login)
-                status = await hass.async_add_executor_job(router.get_status)
-                if not status:
-                    raise UpdateFailed("EX3301-T0 returned an empty CGI payload")
-                device_name = await hass.async_add_executor_job(router.get_device_name, status)
+                status = {}
+                try:
+                    status = await hass.async_add_executor_job(router.get_status)
+                except Exception as ex:  # pylint: disable=broad-except
+                    _LOGGER.warning(
+                        "EX3301-T0 status probes failed during setup for %s: %s; accepting login-only validation",
+                        host,
+                        _safe_error_message(ex),
+                    )
+                if status:
+                    device_name = await hass.async_add_executor_job(router.get_device_name, status)
+                else:
+                    device_name = None
             else:
                 from nr7101 import nr7101
 
