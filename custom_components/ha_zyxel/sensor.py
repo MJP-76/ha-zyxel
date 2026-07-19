@@ -359,6 +359,12 @@ async def async_setup_entry(
         if not _is_value_scalar(value):
             continue
 
+        # For EX3301, skip API fields that return null — these are firmware stubs
+        # (GPON temperature, WAN rate reporting, inactive DSL channels) that will
+        # never have useful data and only add clutter to the entity list.
+        if device_type == "ex3301_t0" and value is None:
+            continue
+
         leaf = key.split(".")[-1]
         sensor_config = KNOWN_SENSORS.get(leaf)
 
