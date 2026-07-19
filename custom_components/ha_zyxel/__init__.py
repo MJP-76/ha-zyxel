@@ -143,7 +143,7 @@ async def _ensure_zyxel_dashboard(hass: HomeAssistant, _entity_rows: list[str]) 
                 "id": ZyXEL_DASHBOARD_ID,
                 "title": "Zyxel Devices",
                 "url_path": ZyXEL_DASHBOARD_URL_PATH,
-                "icon": "mdi:cloud",
+                "icon": "mdi:router",
                 "show_in_sidebar": True,
                 "require_admin": False,
                 "mode": "storage",
@@ -153,6 +153,8 @@ async def _ensure_zyxel_dashboard(hass: HomeAssistant, _entity_rows: list[str]) 
 
     dashboard_store = Store[dict[str, object]](hass, 1, ZyXEL_DASHBOARD_STORAGE_KEY)
     await dashboard_store.async_save(_zyxel_dashboard_config(_dashboard_device_cards(hass)))
+    # Use update=True so re-loading the integration doesn't raise ValueError
+    # when the panel is already registered from a previous HA session.
     frontend.async_register_built_in_panel(
         hass,
         "lovelace",
@@ -162,7 +164,7 @@ async def _ensure_zyxel_dashboard(hass: HomeAssistant, _entity_rows: list[str]) 
         sidebar_title="Zyxel Devices",
         sidebar_icon="mdi:router",
         config={"mode": "storage"},
-        update=False,
+        update=True,
     )
 
 
