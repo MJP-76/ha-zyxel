@@ -75,7 +75,7 @@ class ZyxelRebootButton(ButtonEntity):
             sw_version=sw_version,
         )
         self._attr_icon = "mdi:restart"
-        self._attr_name = "Reboot Device"
+        self._attr_name = "[Action] Reboot Device"
 
     async def async_press(self) -> None:
         """Handle the button press."""
