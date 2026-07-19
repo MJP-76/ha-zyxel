@@ -473,10 +473,6 @@ async def async_setup_entry(
 
         if sensor_config:
             sensors.append(ConfiguredZyxelSensor(coordinator, entry, key, sensor_config))
-        elif device_type == "ex3301_t0" and _looks_like_wlan_path(key) and not _is_sensitive_path(key):
-            # Expose WLAN-relevant EX3301 fields for discovery while filtering
-            # out secrets like passphrases/keys.
-            sensors.append(GenericZyxelSensor(coordinator, entry, key))
         elif device_type != "ex3301_t0":
             # Generic sensors for legacy/NWA50AX — avoid flooding HA for EX3301
             # whose responses contain deeply-nested arrays with hundreds of fields.
