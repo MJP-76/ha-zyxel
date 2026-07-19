@@ -265,7 +265,7 @@ async def async_setup_entry(
 
     flat = _flatten_dict(coordinator.data)
     # Always log all available keys so we can tune KNOWN_SENSORS mappings.
-    _LOGGER.info(
+    _LOGGER.warning(
         "Zyxel (%s) available data keys (%d total): %s",
         device_type,
         len(flat),
@@ -287,8 +287,13 @@ async def async_setup_entry(
             # whose responses contain deeply-nested arrays with hundreds of fields.
             sensors.append(GenericZyxelSensor(coordinator, entry, key))
 
-    _LOGGER.debug("Zyxel sensor setup: creating %d sensors for %s", len(sensors), device_type)
-    if sensors:
+    if not sensors:
+        _LOGGER.warning(
+            "Zyxel (%s): no sensors matched KNOWN_SENSORS — check the data keys log above",
+            device_type,
+        )
+    else:
+        _LOGGER.warning("Zyxel sensor setup: creating %d sensors for %s", len(sensors), device_type)
         async_add_entities(sensors)
 
 
