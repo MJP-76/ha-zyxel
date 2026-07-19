@@ -110,6 +110,30 @@ def _wifi_profile_band_enabled(flat: dict[str, Any], *, main: bool, band: str) -
     return False
 
 
+def _ex3301_sensor_enabled_by_default(key: str) -> bool:
+    """Return True only for the EX3301 default-visible sensor allowlist."""
+    leaf = key.split(".")[-1]
+    if leaf in {"SoftwareVersion", "ModelName", "SerialNumber", "UpTime"}:
+        return True
+    if leaf == "DHCPStatus" and ".WanLanInfo.0." in key:
+        return True
+    if leaf == "v4dns":
+        return True
+    if leaf == "IPAddress" and (".WanLanInfo.2." in key or key.endswith(".Object.0.IPAddress")):
+        return True
+    if leaf == "pppConnectionStatus" and ".WanLanInfo.2." in key:
+        return True
+    if leaf == "EthConnectionStatus":
+        return True
+    if leaf == "v4Gateway" and ".WanLanInfo.2." in key:
+        return True
+    if leaf == "ipoeConnectionUpTime" and ".WanLanInfo.2." in key:
+        return True
+    if leaf == "pppoeConnectionUpTime" and ".WanLanInfo.2." in key:
+        return True
+    return False
+
+
 def _ex3301_wifi_label_for_key(flat: dict[str, Any], key: str) -> tuple[str, str]:
     """Return (name, icon) for EX3301 WiFi key."""
     leaf = key.split(".")[-1]
@@ -760,6 +784,8 @@ class ConfiguredZyxelSensor(AbstractZyxelSensor):
         device_type = str(entry.data.get("device_type", "")).lower().replace("-", "_")
         prefix = _ex3301_section_prefix(key) if device_type == "ex3301_t0" else ""
         self._attr_name = f"{prefix}{config['name']}{self._path_suffix(key)}"
+        if device_type == "ex3301_t0":
+            self._attr_entity_registry_enabled_default = _ex3301_sensor_enabled_by_default(key)
         self._attr_native_unit_of_measurement = None if self._is_uptime else config["unit"]
         self._attr_icon = config["icon"]
         self._attr_device_class = None if self._is_uptime else config["device_class"]
@@ -811,6 +837,7 @@ class EX3301WiFiSensor(AbstractZyxelSensor):
         name, icon = _ex3301_wifi_label_for_key(self._flat_state, key)
         self._attr_name = f"[WiFi] {name}"
         self._attr_icon = icon
+        self._attr_entity_registry_enabled_default = False
 
     @property
     def state(self):
@@ -833,6 +860,7 @@ class EX3301WiFiBandStateSensor(AbstractZyxelSensor):
         self._main = main
         self._attr_name = f"[WiFi] {profile} WiFi {band} Enabled"
         self._attr_icon = "mdi:wifi-check"
+        self._attr_entity_registry_enabled_default = True
 
     @property
     def available(self) -> bool:
