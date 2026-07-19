@@ -482,10 +482,31 @@ async def async_setup_entry(
     # (e.g. sensors suppressed by the null-value filter on this reload).
     current_unique_ids = {s.unique_id for s in sensors}
     ent_reg = er.async_get(hass)
-    for reg_entry in er.async_entries_for_config_entry(ent_reg, entry.entry_id):
+    config_entries = list(er.async_entries_for_config_entry(ent_reg, entry.entry_id))
+    for reg_entry in config_entries:
         if reg_entry.unique_id not in current_unique_ids:
             _LOGGER.debug("Removing stale entity %s", reg_entry.entity_id)
             ent_reg.async_remove(reg_entry.entity_id)
+
+    # Migration cleanup: purge legacy generic EX3301 entities created by older
+    # builds for the same physical device under a different config_entry_id.
+    # These have entity IDs like sensor.zyxel_dal_oid_... and are no longer used.
+    if device_type == "ex3301_t0":
+        current_device_ids = {reg.device_id for reg in config_entries if reg.device_id}
+        if current_device_ids:
+            for reg_entry in list(ent_reg.entities.values()):
+                if reg_entry.platform != DOMAIN:
+                    continue
+                if reg_entry.config_entry_id == entry.entry_id:
+                    continue
+                if reg_entry.device_id not in current_device_ids:
+                    continue
+                if reg_entry.entity_id.startswith("sensor.zyxel_dal_oid_"):
+                    _LOGGER.debug(
+                        "Removing legacy EX3301 generic entity from old entry: %s",
+                        reg_entry.entity_id,
+                    )
+                    ent_reg.async_remove(reg_entry.entity_id)
 
     if not sensors:
         _LOGGER.warning(
