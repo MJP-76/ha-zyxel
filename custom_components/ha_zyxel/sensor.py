@@ -123,6 +123,31 @@ def _ex3301_wifi_label_for_key(flat: dict[str, Any], key: str) -> tuple[str, str
     return f"{profile} {field_name} (Radio {slot})", icon
 
 
+def _ex3301_section_prefix(key: str) -> str:
+    """Return a stable section prefix for EX3301 entity list grouping."""
+    leaf = key.split(".")[-1]
+    if leaf in {"SoftwareVersion", "HardwareVersion", "ModelName", "SerialNumber"}:
+        return "[Core] "
+    if leaf in {"DownstreamCurrRate", "UpstreamCurrRate", "DSLUpTime"}:
+        return "[DSL] "
+    if leaf in {"UpTime", "ipoeConnectionUpTime", "pppoeConnectionUpTime"}:
+        return "[Uptime] "
+    if leaf in {
+        "IPAddress",
+        "DefaultGateway",
+        "v4Gateway",
+        "v4dns",
+        "pppConnectionStatus",
+        "EthConnectionStatus",
+        "DHCPStatus",
+        "WanRate_RX",
+        "WanRate_TX",
+        "WanType",
+    }:
+        return "[Network] "
+    return ""
+
+
 # Define some known sensor types for proper configuration
 KNOWN_SENSORS = {
     "INTF_RSSI": {
@@ -707,7 +732,9 @@ class ConfiguredZyxelSensor(AbstractZyxelSensor):
         super().__init__(coordinator, entry, key)
         self._config = config
         self._is_uptime = key.split(".")[-1] in _UPTIME_LEAF_KEYS
-        self._attr_name = f"{config['name']}{self._path_suffix(key)}"
+        device_type = str(entry.data.get("device_type", "")).lower().replace("-", "_")
+        prefix = _ex3301_section_prefix(key) if device_type == "ex3301_t0" else ""
+        self._attr_name = f"{prefix}{config['name']}{self._path_suffix(key)}"
         self._attr_native_unit_of_measurement = None if self._is_uptime else config["unit"]
         self._attr_icon = config["icon"]
         self._attr_device_class = None if self._is_uptime else config["device_class"]
@@ -757,7 +784,7 @@ class EX3301WiFiSensor(AbstractZyxelSensor):
     def __init__(self, coordinator, entry: ConfigEntry, key: str):
         super().__init__(coordinator, entry, key)
         name, icon = _ex3301_wifi_label_for_key(self._flat_state, key)
-        self._attr_name = name
+        self._attr_name = f"[WiFi] {name}"
         self._attr_icon = icon
 
     @property
