@@ -127,6 +127,28 @@ def _leaf_values(data: Mapping | None) -> dict[str, object]:
     return leafs
 
 
+def _ex3301_wifi_signature(data: Mapping | None) -> tuple[tuple[str, bool, bool, str], ...]:
+    """Return a stable signature of EX3301 WiFi radio state for reload detection."""
+    if not data:
+        return ()
+    flat = _flatten_value(data)
+    radios: dict[str, dict[str, object]] = {}
+    for key, value in flat.items():
+        if ".WiFiInfo." not in key:
+            continue
+        prefix, leaf = key.rsplit(".", 1)
+        radios.setdefault(prefix, {})[leaf] = value
+
+    normalized: list[tuple[str, bool, bool, str]] = []
+    for prefix, fields in radios.items():
+        slot = prefix.split(".")[-1]
+        enabled = bool(fields.get("Enable"))
+        is_main = bool(fields.get("X_ZYXEL_MainSSID"))
+        band = str(fields.get("OperatingFrequencyBand") or "").strip()
+        normalized.append((slot, enabled, is_main, band))
+    return tuple(sorted(normalized))
+
+
 def _detected_model_from_data(entry: ConfigEntry, data: Mapping | None) -> str:
     leafs = _leaf_values(data)
     model = (
@@ -375,7 +397,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         raise UpdateFailed("No data received from router")
                     return data
 
-                return await hass.async_add_executor_job(get_all_data)
+                result = await hass.async_add_executor_job(get_all_data)
+                if device_type == "ex3301_t0":
+                    runtime = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+                    if runtime is not None:
+                        prev = runtime.get("wifi_signature")
+                        new = _ex3301_wifi_signature(result)
+                        runtime["wifi_signature"] = new
+                        if (
+                            prev is not None
+                            and prev != new
+                            and not runtime.get("wifi_reload_pending")
+                        ):
+                            runtime["wifi_reload_pending"] = True
+                            _LOGGER.info(
+                                "EX3301 WiFi state layout changed; reloading entry to refresh entities"
+                            )
+                            hass.async_create_task(hass.config_entries.async_reload(entry.entry_id))
+                return result
         except asyncio.TimeoutError:
             if hasattr(router, "_session_valid"):
                 router._session_valid = False
@@ -428,6 +467,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "coordinator": coordinator,
         "router": router,
         "device_type": device_type,
+        "wifi_signature": _ex3301_wifi_signature(coordinator.data) if device_type == "ex3301_t0" else None,
+        "wifi_reload_pending": False,
     }
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
