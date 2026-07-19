@@ -398,10 +398,8 @@ class EX3301T0Client:
         self._probe("UserLoginCheck")
 
     def _request(self, endpoint: str, method: str = "get") -> requests.Response:
-        url = f"{self.host}/cgi-bin/{endpoint}"
+        url = f"{self.host}/{endpoint}"
         request = getattr(self._session, method.lower())
-        if endpoint.startswith("DAL?"):
-            url = f"{self.host}/cgi-bin/{endpoint}"
         headers = {}
         if method.lower() in {"post", "put", "delete"} and self._csrf_token:
             headers["CSRFToken"] = self._csrf_token
