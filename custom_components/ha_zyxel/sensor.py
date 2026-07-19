@@ -336,6 +336,70 @@ KNOWN_SENSORS = {
         "device_class": SensorDeviceClass.TEMPERATURE,
         "state_class": SensorStateClass.MEASUREMENT,
     },
+    # ── EX3301-T0: WLAN settings (DAL?oid=wlan) ──
+    "WiFiSettings_wifikeepsame": {
+        "name": "Private WiFi Keep Same",
+        "unit": None,
+        "icon": "mdi:wifi-sync",
+        "device_class": None,
+        "state_class": None,
+    },
+    "WiFiSettings_onessid_24g_switch": {
+        "name": "Private WiFi 2.4G Enabled",
+        "unit": None,
+        "icon": "mdi:wifi",
+        "device_class": None,
+        "state_class": None,
+    },
+    "WiFiSettings_onessid_5g_switch": {
+        "name": "Private WiFi 5G Enabled",
+        "unit": None,
+        "icon": "mdi:wifi",
+        "device_class": None,
+        "state_class": None,
+    },
+    "WiFiSettings_both_wifiname": {
+        "name": "Private WiFi SSID",
+        "unit": None,
+        "icon": "mdi:wifi-settings",
+        "device_class": None,
+        "state_class": None,
+    },
+    "WiFiSettings_24g_randompw": {
+        "name": "Private WiFi 2.4G Random Password",
+        "unit": None,
+        "icon": "mdi:key-variant",
+        "device_class": None,
+        "state_class": None,
+    },
+    "WiFiSettings_both_randompw": {
+        "name": "Private WiFi Random Password",
+        "unit": None,
+        "icon": "mdi:key-variant",
+        "device_class": None,
+        "state_class": None,
+    },
+    "WiFiSettings_both_hidewifiname": {
+        "name": "Private WiFi Hide SSID",
+        "unit": None,
+        "icon": "mdi:wifi-hidden",
+        "device_class": None,
+        "state_class": None,
+    },
+    "Guest_WiFiSettings_both_wifiname": {
+        "name": "Guest WiFi SSID",
+        "unit": None,
+        "icon": "mdi:wifi-settings",
+        "device_class": None,
+        "state_class": None,
+    },
+    "Guest_WiFiSettings_both_hidewifiname": {
+        "name": "Guest WiFi Hide SSID",
+        "unit": None,
+        "icon": "mdi:wifi-hidden",
+        "device_class": None,
+        "state_class": None,
+    },
 }
 
 
