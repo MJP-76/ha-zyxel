@@ -154,6 +154,77 @@ KNOWN_SENSORS = {
         "device_class": SensorDeviceClass.DATA_SIZE,
         "state_class": SensorStateClass.TOTAL_INCREASING,
     },
+    # EX3301-T0 DSL router keys (from CardInfo / DAL?oid=cardpage_status)
+    "WAN_IP": {
+        "name": "WAN IP Address",
+        "unit": None,
+        "icon": "mdi:ip-network",
+        "device_class": None,
+        "state_class": None,
+    },
+    "WAN_Status": {
+        "name": "WAN Status",
+        "unit": None,
+        "icon": "mdi:wan",
+        "device_class": None,
+        "state_class": None,
+    },
+    "DSL_Speed_Down": {
+        "name": "DSL Downstream Sync Rate",
+        "unit": "kbit/s",
+        "icon": "mdi:download-network",
+        "device_class": None,
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    "DSL_Speed_Up": {
+        "name": "DSL Upstream Sync Rate",
+        "unit": "kbit/s",
+        "icon": "mdi:upload-network",
+        "device_class": None,
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    "DSL_DS_Actual_Rate": {
+        "name": "DSL Downstream Actual Rate",
+        "unit": "kbit/s",
+        "icon": "mdi:download-network",
+        "device_class": None,
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    "DSL_US_Actual_Rate": {
+        "name": "DSL Upstream Actual Rate",
+        "unit": "kbit/s",
+        "icon": "mdi:upload-network",
+        "device_class": None,
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    "FW_Version": {
+        "name": "Firmware Version",
+        "unit": None,
+        "icon": "mdi:information-outline",
+        "device_class": None,
+        "state_class": None,
+    },
+    "ConnectedDevices": {
+        "name": "Connected Devices",
+        "unit": None,
+        "icon": "mdi:devices",
+        "device_class": None,
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    "loginAccount": {
+        "name": "Logged In Account",
+        "unit": None,
+        "icon": "mdi:account",
+        "device_class": None,
+        "state_class": None,
+    },
+    "loginLevel": {
+        "name": "Account Level",
+        "unit": None,
+        "icon": "mdi:account-key",
+        "device_class": None,
+        "state_class": None,
+    },
 }
 
 
@@ -181,124 +252,6 @@ def _is_value_scalar(value: Any) -> bool:
     return isinstance(value, (str, int, float, bool)) or value is None
 
 
-def _should_skip_sensor_label(label: str) -> bool:
-    """Mark placeholder labels that should be disabled by default."""
-    lowered = label.strip().lower()
-    return lowered in {
-        "",
-        "0",
-        "1",
-        "no",
-        "yes",
-        "from",
-        "to",
-        "card",
-        "name",
-        "type",
-        "mode",
-        "model",
-        "service",
-        "active",
-        "band",
-        "profile",
-        "role",
-        "slot1",
-        "slot2",
-        "internet",
-        "ethernet",
-        "activate",
-        "fqdn",
-        "host name",
-        "domain name",
-        "current language",
-        "serial number",
-        "build date",
-        "firmware version",
-    }
-
-
-ENABLED_SENSOR_KEYS = {
-    "firmware_version",
-    "nebula_claim_status",
-    "ip_status",
-    "serial_number",
-    "slot.1.profile",
-    "slot.0.profile",
-    "model",
-    "mac_address.1",
-    "mac_address.0",
-    "mode",
-    "host_name",
-    "slot2",
-    "slot.0.band",
-    "ip_address",
-    "slot1",
-    "slot.1.wlantransmittedbyte",
-    "slot.1.wlanreceivedbyte",
-    "slot.0.wlanreceivedbyte",
-    "slot.0.wlantransmittedbyte",
-    "slot.1.fcserrorcount",
-    "slot.1.receivedpktcount",
-    "slot.0.receivedpktcount",
-    "slot.1.transmittedpktcount",
-    "slot.0.fcserrorcount",
-    "slot.0.transmittedpktcount",
-    "build_date",
-    "slot.1.channel_utilization",
-    "slot.1.txpower",
-    "slot.0.txpower",
-    "slot.0.channel_utilization",
-    "active",
-    "ipv6_enable",
-    "slot.0.activate",
-    "slot.1.activate",
-    "vlan_tag",
-    "vlan_id",
-    "nebula_claim_reason",
-    "nebula_cloud_reason",
-    "nebula_ntp_status",
-    "nebula_ntp_reason",
-    "ipv6_enable",
-    "ipv6_dhcp6",
-    "ipv6_dhcp6_address_request",
-    "ipv6_gateway",
-    "ipv6_metric",
-    "ipv6_slaac",
-    "ipv6_static_address",
-    "dns_server",
-    "gateway",
-    "ip_address",
-    "mask",
-    "domain_name",
-    "current_language",
-    "fqdn",
-    "service",
-    "name",
-    "type",
-    "from",
-    "no",
-    "session_time",
-    "lease_timeout",
-    "re_auth_timeout",
-    "idle_time",
-    "internet",
-    "ethernet",
-    "zyxel_cloud",
-}
-
-
-def _canonical_sensor_key(key: str) -> str:
-    """Normalize keys so repeated zysh blocks collapse to one entity."""
-    parts = [part for part in key.split(".") if part]
-    normalized: list[str] = []
-    for part in parts:
-        lowered = part.lower()
-        if lowered.startswith("zyshdata"):
-            continue
-        normalized.append(lowered)
-    return ".".join(normalized)
-
-
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
@@ -306,51 +259,25 @@ async def async_setup_entry(
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
 
     if not coordinator.data:
+        _LOGGER.warning("Zyxel coordinator has no data at sensor setup — no sensors created")
         return
 
+    flat = _flatten_dict(coordinator.data)
+    _LOGGER.debug("Zyxel sensor setup: coordinator data keys = %s", list(flat.keys()))
     sensors = []
-    seen_keys: set[str] = set()
 
-    # Process all keys in the JSON and create sensors for them
-    # We'll use a flat structure for simplicity
-    for key, value in _flatten_dict(coordinator.data).items():
-        canonical_key = _canonical_sensor_key(key)
-        if not canonical_key:
-            continue
-        # Keep entities around, but only enable the curated set by default.
-        enabled_default = canonical_key in ENABLED_SENSOR_KEYS
-        if canonical_key in seen_keys:
-            continue
-        seen_keys.add(canonical_key)
-        # Skip non-scalar values
+    for key, value in flat.items():
         if not _is_value_scalar(value):
             continue
 
-        # Check if this is a known sensor type
         sensor_config = KNOWN_SENSORS.get(key.split(".")[-1], None)
 
         if sensor_config:
-            # Create a configured sensor for known types
-            sensors.append(
-                ConfiguredZyxelSensor(
-                    coordinator,
-                    entry,
-                    key,
-                    sensor_config,
-                    enabled_default,
-                )
-            )
+            sensors.append(ConfiguredZyxelSensor(coordinator, entry, key, sensor_config))
         else:
-            # Create a generic sensor for unknown types
-            sensors.append(
-                GenericZyxelSensor(
-                    coordinator,
-                    entry,
-                    key,
-                    enabled_default,
-                )
-            )
+            sensors.append(GenericZyxelSensor(coordinator, entry, key))
 
+    _LOGGER.debug("Zyxel sensor setup: creating %d sensors", len(sensors))
     if sensors:
         async_add_entities(sensors)
 
@@ -358,26 +285,27 @@ async def async_setup_entry(
 class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
     """Base class for Zyxel device sensors."""
 
-    def __init__(self, coordinator, entry: ConfigEntry, key: str, enabled_default: bool):
+    def __init__(self, coordinator, entry: ConfigEntry, key: str):
         """Initialize the sensor."""
         super().__init__(coordinator)
         self._key = key
         self._flat_state: dict[str, Any] = {}
-        self._attr_unique_id = f"{entry.entry_id}_{key}"
+        safe_key = key.replace("?", "_").replace("=", "_").replace("&", "_").replace(" ", "_")
+        self._attr_unique_id = f"{entry.entry_id}_{safe_key}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
-            name=entry.data.get("model") or entry.title,
+            name=f"Zyxel ({entry.data['host']})",
             manufacturer="Zyxel",
-            model=entry.data.get("model") or "Zyxel",
+            model="",
         )
-        self._attr_entity_registry_enabled_default = enabled_default
 
     @property
     def available(self) -> bool:
         """Return if entity is available."""
         if not self.coordinator.last_update_success:
             return False
-        return self._key in _flatten_dict(self.coordinator.data)
+
+        return self._key in self._flat_state
 
     def _get_value_from_path(self) -> Any:
         """Get a value from the cached flattened coordinator data."""
@@ -388,9 +316,9 @@ class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
 class ConfiguredZyxelSensor(AbstractZyxelSensor):
     """Representation of a configured Zyxel sensor."""
 
-    def __init__(self, coordinator, entry: ConfigEntry, key: str, config: dict, enabled_default: bool):
+    def __init__(self, coordinator, entry: ConfigEntry, key: str, config: dict):
         """Initialize the sensor."""
-        super().__init__(coordinator, entry, key, enabled_default)
+        super().__init__(coordinator, entry, key)
         self._config = config
         self._attr_name = f"Zyxel {config['name']}"
         self._attr_native_unit_of_measurement = config["unit"]
@@ -409,9 +337,6 @@ class ConfiguredZyxelSensor(AbstractZyxelSensor):
 
 class GenericZyxelSensor(AbstractZyxelSensor):
     """Representation of a generic Zyxel sensor."""
-
-    def __init__(self, coordinator, entry: ConfigEntry, key: str, enabled_default: bool):
-        super().__init__(coordinator, entry, key, enabled_default)
 
     @property
     def name(self):

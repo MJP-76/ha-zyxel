@@ -242,33 +242,31 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         _LOGGER.exception("Could not create Zyxel client for %s", host)
         raise ConfigEntryNotReady from ex
 
+    # EX3301 probes each carry a 15s timeout; allow enough wall time for all of them.
+    _UPDATE_TIMEOUT = 180 if device_type == "ex3301_t0" else 30
+
     async def async_update_data():
         """Fetch data from the router."""
         try:
-            async with async_timeout.timeout(15):
+            async with async_timeout.timeout(_UPDATE_TIMEOUT):
                 def get_all_data():
-                    if device_type == "nwa50ax":
+                    if device_type in {"nwa50ax", "ex3301_t0"}:
+                        return router.get_status()
+                    data = _merge_status_data(router)
+                    if not data:
                         data = router.get_status()
-                    elif device_type == "ex3301_t0":
-                        data = router.get_status()
-                    else:
-                        data = _merge_status_data(router)
-                    if not data and device_type != "nwa50ax":
-                        legacy_data = router.get_status()
-                        if legacy_data:
-                            data = legacy_data
-
                     if not data:
                         raise UpdateFailed("No data received from router")
-
                     return data
 
                 return await hass.async_add_executor_job(get_all_data)
         except asyncio.TimeoutError:
-            router._session_valid = False
+            if hasattr(router, "_session_valid"):
+                router._session_valid = False
             raise UpdateFailed("Router data fetch timed out")
         except Exception as err:
-            router._session_valid = False
+            if hasattr(router, "_session_valid"):
+                router._session_valid = False
             _LOGGER.exception("Error communicating with Zyxel device at %s", host)
             raise UpdateFailed(f"Error communicating with router: {err}") from err
 
