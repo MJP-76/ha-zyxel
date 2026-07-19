@@ -315,13 +315,6 @@ KNOWN_SENSORS = {
         "device_class": None,
         "state_class": None,
     },
-    "HardwareVersion": {
-        "name": "Hardware Version",
-        "unit": None,
-        "icon": "mdi:chip",
-        "device_class": None,
-        "state_class": None,
-    },
     "ModelName": {
         "name": "Model",
         "unit": None,
