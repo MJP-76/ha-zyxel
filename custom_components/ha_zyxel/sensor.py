@@ -409,11 +409,21 @@ class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
         )
         safe_key = key.replace("?", "_").replace("=", "_").replace("&", "_").replace(" ", "_")
         self._attr_unique_id = f"{entry.entry_id}_{safe_key}"
+        flat = self._flat_state
+        model = (
+            flat.get("ModelName")
+            or flat.get("ProductClass")
+            or flat.get("HardwareVersion")
+            or entry.data.get("device_type", "").upper()
+            or entry.data.get("host", "")
+        )
+        sw_version = flat.get("SoftwareVersion") or flat.get("FirmwareVersion")
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
-            name=f"Zyxel ({entry.data['host']})",
+            name=f"Zyxel {model}",
             manufacturer="Zyxel",
-            model="",
+            model=model,
+            sw_version=sw_version,
         )
 
     @callback
