@@ -208,7 +208,7 @@ def _dashboard_device_cards(hass: HomeAssistant) -> list[dict[str, object]]:
         if not group.get("config_entry_id") and entity.config_entry_id:
             group["config_entry_id"] = entity.config_entry_id
 
-    by_heading: dict[str, list[str]] = {}
+    cards: list[dict[str, object]] = []
     for device_id in sorted(grouped):
         device = device_registry.devices.get(device_id)
         if device and device.disabled_by is not None:
@@ -222,12 +222,6 @@ def _dashboard_device_cards(hass: HomeAssistant) -> list[dict[str, object]]:
             config_entry = hass.config_entries.async_get_entry(config_entry_id)
             if config_entry:
                 heading = config_entry.title
-
-        by_heading.setdefault(heading, []).extend(group["entities"])
-
-    cards: list[dict[str, object]] = []
-    for heading in sorted(by_heading):
-        entities = sorted(set(by_heading[heading]))
         cards.append(
             {
                 "type": "grid",
@@ -240,7 +234,7 @@ def _dashboard_device_cards(hass: HomeAssistant) -> list[dict[str, object]]:
                     },
                     {
                         "type": "entities",
-                        "entities": entities,
+                        "entities": sorted(group["entities"]),
                     },
                 ],
             }
