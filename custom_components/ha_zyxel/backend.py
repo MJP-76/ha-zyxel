@@ -237,8 +237,8 @@ class EX3301T0Client:
     """Probe Zyxel EX3301-T0 stock firmware CGI endpoints."""
 
     # Endpoints tried without any path prefix (same level as login/key endpoints).
+    # UserLoginCheck intentionally excluded — it consistently times out on this firmware.
     _ENDPOINTS = (
-        "UserLoginCheck",
         "loginAccountLevel",
         "MenuList",
         "CardInfo",
@@ -418,6 +418,17 @@ class EX3301T0Client:
                 raise UpdateFailed(f"EX3301-T0 redirected to HTTPS while requesting {endpoint}")
         return response
 
+    _SESSION_EXPIRED_MARKERS = ("login", "Login", "unauthorized", "Unauthorized", "sessionExpired")
+
+    def _is_session_expired(self, resp: requests.Response) -> bool:
+        """Return True if the response looks like a session-expired redirect or error."""
+        if resp.status_code in (301, 302, 303, 307, 308):
+            location = resp.headers.get("Location", "")
+            return any(m in location for m in ("login", "Login"))
+        if resp.status_code in (401, 403):
+            return True
+        return False
+
     def _probe(self, endpoint: str) -> dict | str | None:
         try:
             resp = self._request(endpoint)
@@ -438,6 +449,8 @@ class EX3301T0Client:
             resp.status_code,
             resp.text[:120],
         )
+        if self._is_session_expired(resp):
+            raise UpdateFailed(f"EX3301-T0 session expired (probe {endpoint})")
         text = resp.text.strip()
         if not text:
             return None
