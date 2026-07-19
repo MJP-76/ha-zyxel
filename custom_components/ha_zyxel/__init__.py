@@ -217,6 +217,13 @@ def _dashboard_device_cards(hass: HomeAssistant) -> list[dict[str, object]]:
         if not group["entities"]:
             continue
         heading = _device_title(device)
+        config_entry_id = group.get("config_entry_id")
+        if config_entry_id:
+            config_entry = hass.config_entries.async_get_entry(config_entry_id)
+            if config_entry:
+                host = _entry_host(config_entry)
+                if host:
+                    heading = f"{heading} ({host})"
         cards.append(
             {
                 "type": "grid",
