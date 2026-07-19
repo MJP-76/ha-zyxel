@@ -23,10 +23,7 @@ _LOGGER = logging.getLogger(__name__)
 _UPTIME_LEAF_KEYS = {"UpTime", "DSLUpTime", "ipoeConnectionUpTime", "pppoeConnectionUpTime"}
 _WLAN_HINT_TOKENS = ("wlan", "wifi", "wireless", "ssid", "channel", "radio", "band")
 _SENSITIVE_HINT_TOKENS = ("password", "passphrase", "psk", "wep", "key")
-_EX3301_WIFI_TOP_LEVEL_KEYS = {
-    "DAL?oid=cardpage_status.Object.0.GuestSSIDEnable",
-    "DAL?oid=cardpage_status.Object.0.oneSsidEnable",
-}
+_EX3301_WIFI_TOP_LEVEL_KEYS: set[str] = set()
 _EX3301_WIFIINFO_ALLOWED_LEAFS = {
     "SSID",
     "Channel",
@@ -81,13 +78,40 @@ def _is_active_wifiinfo_path(flat: dict[str, Any], key: str) -> bool:
     return bool(enabled)
 
 
+def _normalize_wifi_band(value: Any) -> str:
+    band = str(value or "").strip().lower()
+    if "2.4" in band:
+        return "2.4GHz"
+    if "5" in band:
+        return "5GHz"
+    return ""
+
+
+def _wifiinfo_prefixes(flat: dict[str, Any]) -> set[str]:
+    prefixes: set[str] = set()
+    for key in flat:
+        if ".WiFiInfo." not in key:
+            continue
+        prefixes.add(key.rsplit(".", 1)[0])
+    return prefixes
+
+
+def _wifi_profile_band_enabled(flat: dict[str, Any], *, main: bool, band: str) -> bool:
+    target_band = band.lower()
+    for prefix in _wifiinfo_prefixes(flat):
+        if not bool(flat.get(f"{prefix}.Enable")):
+            continue
+        is_main = bool(flat.get(f"{prefix}.X_ZYXEL_MainSSID"))
+        if is_main != main:
+            continue
+        radio_band = _normalize_wifi_band(flat.get(f"{prefix}.OperatingFrequencyBand")).lower()
+        if radio_band == target_band:
+            return True
+    return False
+
+
 def _ex3301_wifi_label_for_key(flat: dict[str, Any], key: str) -> tuple[str, str]:
     """Return (name, icon) for EX3301 WiFi key."""
-    if key.endswith(".GuestSSIDEnable"):
-        return "Guest WiFi Enabled", "mdi:wifi-lock-open"
-    if key.endswith(".oneSsidEnable"):
-        return "One SSID Mode Enabled", "mdi:wifi-sync"
-
     leaf = key.split(".")[-1]
     field_name = {
         "SSID": "SSID",
@@ -549,6 +573,7 @@ async def async_setup_entry(
         len(flat),
         sorted(flat.keys()),
     )
+    sensors = []
     if device_type == "ex3301_t0":
         wlan_keys = sorted(
             key for key in flat if _looks_like_wlan_path(key) and not _is_sensitive_path(key)
@@ -559,7 +584,14 @@ async def async_setup_entry(
             len(wlan_keys),
             wlan_keys,
         )
-    sensors = []
+        sensors.extend(
+            [
+                EX3301WiFiBandStateSensor(coordinator, entry, "Private", "2.4GHz", True),
+                EX3301WiFiBandStateSensor(coordinator, entry, "Private", "5GHz", True),
+                EX3301WiFiBandStateSensor(coordinator, entry, "Guest", "2.4GHz", False),
+                EX3301WiFiBandStateSensor(coordinator, entry, "Guest", "5GHz", False),
+            ]
+        )
 
     for key, value in flat.items():
         if not _is_value_scalar(value):
@@ -794,4 +826,33 @@ class EX3301WiFiSensor(AbstractZyxelSensor):
             value = self._get_value_from_path()
             return value if value != "" else None
         except (KeyError, AttributeError, TypeError, IndexError, ValueError):
+            return None
+
+
+class EX3301WiFiBandStateSensor(AbstractZyxelSensor):
+    """Derived EX3301 sensor for private/guest WiFi enabled per band."""
+
+    def __init__(self, coordinator, entry: ConfigEntry, profile: str, band: str, main: bool):
+        key = f"EX3301.WiFi.{profile}.{band}.Enabled"
+        super().__init__(coordinator, entry, key)
+        self._profile = profile
+        self._band = band
+        self._main = main
+        self._attr_name = f"[WiFi] {profile} WiFi {band} Enabled"
+        self._attr_icon = "mdi:wifi-check"
+
+    @property
+    def available(self) -> bool:
+        return bool(self.coordinator.last_update_success and self.coordinator.data)
+
+    @property
+    def state(self):
+        try:
+            flat = _flatten_dict(self.coordinator.data) if self.coordinator.data else {}
+            return _wifi_profile_band_enabled(
+                flat,
+                main=self._main,
+                band=self._band,
+            )
+        except (TypeError, ValueError, AttributeError):
             return None
