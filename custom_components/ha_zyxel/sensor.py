@@ -21,6 +21,8 @@ from custom_components.ha_zyxel.const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 _UPTIME_LEAF_KEYS = {"UpTime", "DSLUpTime", "ipoeConnectionUpTime", "pppoeConnectionUpTime"}
+_WLAN_HINT_TOKENS = ("wlan", "wifi", "wireless", "ssid", "channel", "radio", "band")
+_SENSITIVE_HINT_TOKENS = ("password", "passphrase", "psk", "wep", "key")
 
 
 def _format_uptime_dms(value: Any) -> str | None:
@@ -34,6 +36,16 @@ def _format_uptime_dms(value: Any) -> str | None:
     days, rem = divmod(total_seconds, 86400)
     minutes, seconds = divmod(rem, 60)
     return f"{days}d {minutes}m {seconds}s"
+
+
+def _looks_like_wlan_path(key: str) -> bool:
+    lowered = key.lower()
+    return any(token in lowered for token in _WLAN_HINT_TOKENS)
+
+
+def _is_sensitive_path(key: str) -> bool:
+    lowered = key.lower()
+    return any(token in lowered for token in _SENSITIVE_HINT_TOKENS)
 
 
 # Define some known sensor types for proper configuration
@@ -370,6 +382,16 @@ async def async_setup_entry(
         len(flat),
         sorted(flat.keys()),
     )
+    if device_type == "ex3301_t0":
+        wlan_keys = sorted(
+            key for key in flat if _looks_like_wlan_path(key) and not _is_sensitive_path(key)
+        )
+        _LOGGER.info(
+            "Zyxel (%s) WLAN-related data keys (%d total): %s",
+            device_type,
+            len(wlan_keys),
+            wlan_keys,
+        )
     sensors = []
 
     for key, value in flat.items():
@@ -387,6 +409,10 @@ async def async_setup_entry(
 
         if sensor_config:
             sensors.append(ConfiguredZyxelSensor(coordinator, entry, key, sensor_config))
+        elif device_type == "ex3301_t0" and _looks_like_wlan_path(key) and not _is_sensitive_path(key):
+            # Expose WLAN-relevant EX3301 fields for discovery while filtering
+            # out secrets like passphrases/keys.
+            sensors.append(GenericZyxelSensor(coordinator, entry, key))
         elif device_type != "ex3301_t0":
             # Generic sensors for legacy/NWA50AX — avoid flooding HA for EX3301
             # whose responses contain deeply-nested arrays with hundreds of fields.
