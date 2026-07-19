@@ -10,7 +10,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -395,17 +395,22 @@ class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
             model="",
         )
 
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Refresh flat-state cache then write HA state."""
+        if self.coordinator.data:
+            self._flat_state = _flatten_dict(self.coordinator.data)
+        self.async_write_ha_state()
+
     @property
     def available(self) -> bool:
         """Return if entity is available."""
-        if not self.coordinator.last_update_success:
+        if not self.coordinator.last_update_success or not self.coordinator.data:
             return False
-
         return self._key in self._flat_state
 
     def _get_value_from_path(self) -> Any:
-        """Get a value from the cached flattened coordinator data."""
-        self._flat_state = _flatten_dict(self.coordinator.data)
+        """Return the value from the cached flat state."""
         return self._flat_state[self._key]
 
 
@@ -426,18 +431,20 @@ class ConfiguredZyxelSensor(AbstractZyxelSensor):
     def _path_suffix(cls, key: str) -> str:
         """Return a disambiguating suffix for keys that appear at multiple array indices.
 
-        Scans the path right-to-left for the first numeric component that has a
-        named (non-numeric) parent, skipping the top-level 'Object.0' wrapper.
-        Example: 'DAL?oid=cardpage_status.Object.0.DslChannelInfo.1.DownstreamCurrRate'
-                 → ' (DSL Ch 1)'
+        Scans the path right-to-left for the first numeric component whose
+        named parent maps to a non-empty label, skipping 'Object' and parents
+        mapped to '' (e.g. IPv4Address) so we bubble up to a more meaningful
+        ancestor like WanLanInfo.
         """
         parts = key.split(".")
         for i in range(len(parts) - 2, 0, -1):
             if parts[i].isdigit() and not parts[i - 1].isdigit():
                 parent = parts[i - 1]
                 if parent == "Object":
-                    continue  # Skip the outer Object.0 wrapper
+                    continue
                 prefix = cls._PARENT_LABELS.get(parent, parent)
+                if prefix == "":
+                    continue  # uninformative parent (e.g. IPv4Address) — keep scanning
                 label = f"{prefix} {parts[i]}".strip()
                 return f" ({label})" if label else ""
         return ""
