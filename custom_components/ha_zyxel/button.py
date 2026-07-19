@@ -12,26 +12,65 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 
 
+def _button_device_model(entry: ConfigEntry, coordinator) -> tuple[str, str | None]:
+    """Return (model_name, sw_version) from coordinator data or entry config."""
+    data = coordinator.data if coordinator else None
+    if data:
+        # coordinator data is a nested dict; find leaf values by key suffix.
+        def _find(d, key):
+            if isinstance(d, dict):
+                for k, v in d.items():
+                    if k == key and not isinstance(v, (dict, list)):
+                        return v
+                    found = _find(v, key)
+                    if found is not None:
+                        return found
+            elif isinstance(d, list):
+                for item in d:
+                    found = _find(item, key)
+                    if found is not None:
+                        return found
+            return None
+
+        model = (
+            _find(data, "ModelName")
+            or _find(data, "ProductClass")
+            or _find(data, "HardwareVersion")
+        )
+        sw_version = _find(data, "SoftwareVersion") or _find(data, "FirmwareVersion")
+    else:
+        model = None
+        sw_version = None
+
+    if not model:
+        model = entry.data.get("device_type", "").upper().replace("_", "-") or entry.data.get("host", "")
+
+    return model, sw_version
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up the Zyxel buttons."""
     router = hass.data[DOMAIN][entry.entry_id]["router"]
-    async_add_entities([ZyxelRebootButton(entry, router)])
+    coordinator = hass.data[DOMAIN][entry.entry_id].get("coordinator")
+    async_add_entities([ZyxelRebootButton(entry, router, coordinator)])
 
 
 class ZyxelRebootButton(ButtonEntity):
     """Representation of a Zyxel reboot button."""
 
-    def __init__(self, entry: ConfigEntry, router) -> None:
+    def __init__(self, entry: ConfigEntry, router, coordinator) -> None:
         """Initialize the button."""
         self._router = router
         self._attr_unique_id = f"{entry.entry_id}_reboot"
+        model, sw_version = _button_device_model(entry, coordinator)
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
-            name=f"Zyxel ({entry.data['host']})",
+            name=f"Zyxel {model}",
             manufacturer="Zyxel",
-            model="",
+            model=model,
+            sw_version=sw_version,
         )
         self._attr_icon = "mdi:restart"
         self._attr_name = "Zyxel Reboot Device"
