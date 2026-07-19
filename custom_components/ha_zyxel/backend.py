@@ -236,20 +236,27 @@ class NWA50AXClient:
 class EX3301T0Client:
     """Probe Zyxel EX3301-T0 stock firmware CGI endpoints."""
 
+    # Endpoints tried without any path prefix (same level as login/key endpoints).
     _ENDPOINTS = (
         "UserLoginCheck",
         "loginAccountLevel",
         "MenuList",
         "CardInfo",
+    )
+    # Endpoints that may live under cgi-bin/ on some firmware builds.
+    _CGI_ENDPOINTS = (
         "DAL?oid=cardpage_status",
         "DAL?oid=lan",
         "DAL?oid=lanhosts",
     )
-    _CORE_ENDPOINTS = (
+    # Validation succeeds if ANY of these return data.
+    _CORE_ENDPOINTS = frozenset({
         "MenuList",
         "CardInfo",
+        "UserLoginCheck",
         "DAL?oid=lan",
-    )
+        "cgi-bin/DAL?oid=lan",
+    })
 
     def __init__(self, host: str, username: str, password: str, timeout: int = 15) -> None:
         self.host = host.rstrip("/")
@@ -425,14 +432,27 @@ class EX3301T0Client:
                 err,
             )
             return None
-        _LOGGER.debug("EX3301-T0 probe %s status=%s url=%s", endpoint, resp.status_code, resp.url)
+        _LOGGER.debug(
+            "EX3301-T0 probe %s status=%s body_prefix=%r",
+            endpoint,
+            resp.status_code,
+            resp.text[:120],
+        )
         text = resp.text.strip()
         if not text:
             return None
         try:
-            return json.loads(text)
+            parsed = json.loads(text)
         except json.JSONDecodeError:
             return text
+        # Decrypt AES-wrapped responses using the session key from login.
+        if isinstance(parsed, dict) and "content" in parsed and "iv" in parsed and self._aes_key:
+            try:
+                decrypted = self._aes_decrypt(parsed["content"], self._aes_key, parsed["iv"])
+                return json.loads(decrypted)
+            except Exception as err:  # pylint: disable=broad-except
+                _LOGGER.debug("EX3301-T0 probe %s decrypt failed: %s", endpoint, err)
+        return parsed
 
     @staticmethod
     def _safe_json(resp: requests.Response, context: str) -> dict:
@@ -472,6 +492,20 @@ class EX3301T0Client:
                 data[endpoint] = payload
                 if endpoint in self._CORE_ENDPOINTS:
                     has_core_payload = True
+        # Try DAL endpoints both with and without cgi-bin/ prefix.
+        for endpoint in self._CGI_ENDPOINTS:
+            payload = self._probe(endpoint)
+            if payload is not None:
+                data[endpoint] = payload
+                if endpoint in self._CORE_ENDPOINTS:
+                    has_core_payload = True
+            else:
+                cgi_endpoint = f"cgi-bin/{endpoint}"
+                payload = self._probe(cgi_endpoint)
+                if payload is not None:
+                    data[endpoint] = payload
+                    if cgi_endpoint in self._CORE_ENDPOINTS:
+                        has_core_payload = True
         if not has_core_payload:
             raise UpdateFailed("EX3301-T0 returned no usable core CGI payloads")
         return data
