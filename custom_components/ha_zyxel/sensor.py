@@ -20,6 +20,22 @@ from custom_components.ha_zyxel.const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
+_UPTIME_LEAF_KEYS = {"UpTime", "DSLUpTime", "ipoeConnectionUpTime", "pppoeConnectionUpTime"}
+
+
+def _format_uptime_dms(value: Any) -> str | None:
+    """Format uptime seconds as <days>d <minutes>m <seconds>s."""
+    try:
+        total_seconds = int(float(value))
+    except (TypeError, ValueError):
+        return None
+    if total_seconds < 0:
+        return None
+    days, rem = divmod(total_seconds, 86400)
+    minutes, seconds = divmod(rem, 60)
+    return f"{days}d {minutes}m {seconds}s"
+
+
 # Define some known sensor types for proper configuration
 KNOWN_SENSORS = {
     "INTF_RSSI": {
@@ -497,18 +513,23 @@ class ConfiguredZyxelSensor(AbstractZyxelSensor):
         """Initialize the sensor."""
         super().__init__(coordinator, entry, key)
         self._config = config
+        self._is_uptime = key.split(".")[-1] in _UPTIME_LEAF_KEYS
         self._attr_name = f"Zyxel {config['name']}{self._path_suffix(key)}"
-        self._attr_native_unit_of_measurement = config["unit"]
+        self._attr_native_unit_of_measurement = None if self._is_uptime else config["unit"]
         self._attr_icon = config["icon"]
-        self._attr_device_class = config["device_class"]
-        self._attr_state_class = config["state_class"]
+        self._attr_device_class = None if self._is_uptime else config["device_class"]
+        self._attr_state_class = None if self._is_uptime else config["state_class"]
 
     @property
     def state(self):
         """Return the state of the sensor, or None for empty strings."""
         try:
             value = self._get_value_from_path()
-            return value if value != "" else None
+            if value == "":
+                return None
+            if self._is_uptime:
+                return _format_uptime_dms(value)
+            return value
         except (KeyError, AttributeError, TypeError, IndexError, ValueError):
             return None
 
