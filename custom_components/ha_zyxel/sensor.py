@@ -243,14 +243,15 @@ KNOWN_SENSORS = {
         "state_class": None,
     },
     "DefaultGateway": {
-        "name": "Default Gateway",
+        # This field is a boolean: True = this interface is the active default route.
+        "name": "Is Default Route",
         "unit": None,
-        "icon": "mdi:router-network",
+        "icon": "mdi:routes",
         "device_class": None,
         "state_class": None,
     },
     "v4Gateway": {
-        "name": "WAN Gateway",
+        "name": "WAN Gateway IP",
         "unit": None,
         "icon": "mdi:router-network",
         "device_class": None,
@@ -427,6 +428,7 @@ class ConfiguredZyxelSensor(AbstractZyxelSensor):
         "WanLanInfo": "WAN",
         "LanInfo": "LAN",
         "LanPortInfo": "LAN Port",
+        "dnsv4Server": "DNS",
         "IPv4Address": "",
         "Object": "",
     }
@@ -465,9 +467,10 @@ class ConfiguredZyxelSensor(AbstractZyxelSensor):
 
     @property
     def state(self):
-        """Return the state of the sensor."""
+        """Return the state of the sensor, or None for empty strings."""
         try:
-            return self._get_value_from_path()
+            value = self._get_value_from_path()
+            return value if value != "" else None
         except (KeyError, AttributeError, TypeError, IndexError, ValueError):
             return None
 
@@ -483,9 +486,10 @@ class GenericZyxelSensor(AbstractZyxelSensor):
 
     @property
     def state(self):
-        """Return the state of the sensor."""
+        """Return the state of the sensor, or None for empty strings."""
         try:
-            return self._get_value_from_path()
+            value = self._get_value_from_path()
+            return value if value != "" else None
         except (KeyError, AttributeError, TypeError, IndexError, ValueError):
             return None
 
