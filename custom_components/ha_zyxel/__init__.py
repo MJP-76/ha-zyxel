@@ -96,10 +96,60 @@ def _device_title(entry) -> str:
     return "Zyxel Device"
 
 
+def _entry_host(entry: ConfigEntry) -> str:
+    host = entry.data.get(CONF_HOST, "")
+    if host.startswith(("http://", "https://")):
+        host = host.split("://", 1)[1]
+    return host.split("/", 1)[0]
+
+
+def _hostish_title(title: str) -> str:
+    return title.strip().lower().replace("(", "").replace(")", "")
+
+
+def _leaf_values(data: Mapping | None) -> dict[str, object]:
+    if not data:
+        return {}
+    flat = _flatten_value(data)
+    leafs: dict[str, object] = {}
+    for path, value in flat.items():
+        leaf = path.split(".")[-1]
+        if leaf not in leafs:
+            leafs[leaf] = value
+    return leafs
+
+
+def _detected_model_from_data(entry: ConfigEntry, data: Mapping | None) -> str:
+    leafs = _leaf_values(data)
+    model = (
+        leafs.get("ModelName")
+        or leafs.get("ProductClass")
+        or leafs.get("HardwareVersion")
+        or entry.data.get("model")
+        or entry.data.get(CONF_DEVICE_TYPE, "")
+        or _entry_host(entry)
+    )
+    return str(model).upper().replace("_", "-")
+
+
+def _should_update_title_to_model(entry: ConfigEntry, model_title: str) -> bool:
+    normalized_title = _hostish_title(entry.title)
+    host = _entry_host(entry).lower()
+    device_type = str(entry.data.get(CONF_DEVICE_TYPE, "")).lower()
+    defaults = {
+        f"zyxel {host}",
+        f"zyxel {device_type}",
+        f"zyxel {device_type.upper()}".lower(),
+        f"zyxel {host}:80",
+        f"zyxel {host}:443",
+    }
+    return normalized_title in defaults and entry.title != model_title
+
+
 def _dashboard_device_cards(hass: HomeAssistant) -> list[dict[str, object]]:
     entity_registry = er.async_get(hass)
     device_registry = dr.async_get(hass)
-    grouped: dict[str, list[str]] = {}
+    grouped: dict[str, dict[str, object]] = {}
     for entity in entity_registry.entities.values():
         if entity.platform != DOMAIN:
             continue
@@ -107,24 +157,37 @@ def _dashboard_device_cards(hass: HomeAssistant) -> list[dict[str, object]]:
             continue
         if not entity.device_id:
             continue
-        grouped.setdefault(entity.device_id, []).append(entity.entity_id)
+        group = grouped.setdefault(
+            entity.device_id,
+            {"entities": [], "config_entry_id": entity.config_entry_id},
+        )
+        group["entities"].append(entity.entity_id)
+        if not group.get("config_entry_id") and entity.config_entry_id:
+            group["config_entry_id"] = entity.config_entry_id
 
     cards: list[dict[str, object]] = []
     for device_id in sorted(grouped):
         device = device_registry.devices.get(device_id)
+        group = grouped[device_id]
+        heading = _device_title(device)
+        config_entry_id = group.get("config_entry_id")
+        if config_entry_id:
+            config_entry = hass.config_entries.async_get_entry(config_entry_id)
+            if config_entry:
+                heading = config_entry.title
         cards.append(
             {
                 "type": "grid",
                 "cards": [
                     {
                         "type": "heading",
-                        "heading": _device_title(device),
+                        "heading": heading,
                         "heading_style": "subtitle",
                         "icon": "mdi:access-point",
                     },
                     {
                         "type": "entities",
-                        "entities": sorted(grouped[device_id]),
+                        "entities": sorted(group["entities"]),
                     },
                 ],
             }
@@ -321,6 +384,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
 
     await coordinator.async_config_entry_first_refresh()
+
+    # Keep integration title/data aligned with detected model for existing
+    # host-based entries (e.g. "Zyxel 172.16.1.254" -> "Zyxel EX3301-T0").
+    detected_model = _detected_model_from_data(entry, coordinator.data)
+    detected_title = f"Zyxel {detected_model}"
+    updated_data = dict(entry.data)
+    data_changed = updated_data.get("model") != detected_model
+    if data_changed:
+        updated_data["model"] = detected_model
+    if _should_update_title_to_model(entry, detected_title):
+        hass.config_entries.async_update_entry(
+            entry,
+            title=detected_title,
+            data=updated_data,
+        )
+    elif data_changed:
+        hass.config_entries.async_update_entry(entry, data=updated_data)
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
