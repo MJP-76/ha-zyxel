@@ -482,6 +482,10 @@ class ConfiguredZyxelSensor(AbstractZyxelSensor):
                 parent = parts[i - 1]
                 if parent == "Object":
                     continue
+                if parent == "WanLanInfo":
+                    if parts[i] == "0":
+                        return " (LAN)"
+                    return f" (WAN {parts[i]})"
                 prefix = cls._PARENT_LABELS.get(parent, parent)
                 if prefix == "":
                     continue  # uninformative parent (e.g. IPv4Address) — keep scanning
