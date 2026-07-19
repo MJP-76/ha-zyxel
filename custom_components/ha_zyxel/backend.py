@@ -248,6 +248,7 @@ class EX3301T0Client:
     _CGI_ENDPOINTS = (
         "DAL?oid=cardpage_status",
         "DAL?oid=lan",
+        "DAL?oid=wlan",
     )
     # Validation succeeds if ANY of these return data.
     _CORE_ENDPOINTS = frozenset({
