@@ -463,7 +463,10 @@ async def async_setup_entry(
 ) -> None:
     """Set up the Zyxel sensors."""
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
-    device_type = hass.data[DOMAIN][entry.entry_id].get("device_type", "legacy")
+    device_type = str(hass.data[DOMAIN][entry.entry_id].get("device_type", "legacy")).lower().replace(
+        "-",
+        "_",
+    )
 
     if not coordinator.data:
         _LOGGER.warning("Zyxel coordinator has no data at sensor setup — no sensors created")

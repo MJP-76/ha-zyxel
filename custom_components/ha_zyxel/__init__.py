@@ -107,6 +107,14 @@ def _hostish_title(title: str) -> str:
     return title.strip().lower().replace("(", "").replace(")", "")
 
 
+def _normalize_device_type(value: str | None) -> str:
+    """Normalize device type aliases to canonical internal ids."""
+    normalized = str(value or "legacy").strip().lower().replace("-", "_")
+    if normalized == "ex3301":
+        return "ex3301_t0"
+    return normalized
+
+
 def _leaf_values(data: Mapping | None) -> dict[str, object]:
     if not data:
         return {}
@@ -324,7 +332,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     host = entry.data[CONF_HOST]
     username = entry.data[CONF_USERNAME]
     password = entry.data[CONF_PASSWORD]
-    device_type = entry.data.get(CONF_DEVICE_TYPE, "legacy")
+    raw_device_type = entry.data.get(CONF_DEVICE_TYPE, "legacy")
+    device_type = _normalize_device_type(raw_device_type)
+    if raw_device_type != device_type:
+        updated_data = dict(entry.data)
+        updated_data[CONF_DEVICE_TYPE] = device_type
+        hass.config_entries.async_update_entry(entry, data=updated_data)
     if device_type in {"nwa50ax", "ex3301_t0"} and not host.startswith(("http://", "https://")):
         host = f"http://{host}"
 
