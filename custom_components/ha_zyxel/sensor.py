@@ -11,6 +11,7 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -375,13 +376,22 @@ async def async_setup_entry(
             # whose responses contain deeply-nested arrays with hundreds of fields.
             sensors.append(GenericZyxelSensor(coordinator, entry, key))
 
+    # Remove stale entity registry entries that are no longer being created
+    # (e.g. sensors suppressed by the null-value filter on this reload).
+    current_unique_ids = {s.unique_id for s in sensors}
+    ent_reg = er.async_get(hass)
+    for reg_entry in er.async_entries_for_config_entry(ent_reg, entry.entry_id):
+        if reg_entry.unique_id not in current_unique_ids:
+            _LOGGER.debug("Removing stale entity %s", reg_entry.entity_id)
+            ent_reg.async_remove(reg_entry.entity_id)
+
     if not sensors:
         _LOGGER.warning(
             "Zyxel (%s): no sensors matched KNOWN_SENSORS — check the data keys log above",
             device_type,
         )
     else:
-        _LOGGER.warning("Zyxel sensor setup: creating %d sensors for %s", len(sensors), device_type)
+        _LOGGER.debug("Zyxel sensor setup: creating %d sensors for %s", len(sensors), device_type)
         async_add_entities(sensors)
 
 
