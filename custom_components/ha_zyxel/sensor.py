@@ -385,7 +385,11 @@ class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
         """Initialize the sensor."""
         super().__init__(coordinator)
         self._key = key
-        self._flat_state: dict[str, Any] = {}
+        # Pre-populate immediately in case the coordinator already refreshed
+        # before this sensor was registered (sensors are created after first_refresh).
+        self._flat_state: dict[str, Any] = (
+            _flatten_dict(coordinator.data) if coordinator.data else {}
+        )
         safe_key = key.replace("?", "_").replace("=", "_").replace("&", "_").replace(" ", "_")
         self._attr_unique_id = f"{entry.entry_id}_{safe_key}"
         self._attr_device_info = DeviceInfo(
