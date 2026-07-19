@@ -81,7 +81,7 @@ def _is_active_wifiinfo_path(flat: dict[str, Any], key: str) -> bool:
     return bool(enabled)
 
 
-def _ex3301_wifi_label_for_key(key: str) -> tuple[str, str]:
+def _ex3301_wifi_label_for_key(flat: dict[str, Any], key: str) -> tuple[str, str]:
     """Return (name, icon) for EX3301 WiFi key."""
     if key.endswith(".GuestSSIDEnable"):
         return "Guest WiFi Enabled", "mdi:wifi-lock-open"
@@ -114,7 +114,13 @@ def _ex3301_wifi_label_for_key(key: str) -> tuple[str, str]:
         slot = parts[i + 1]
     except (ValueError, IndexError):
         slot = "?"
-    return f"WiFi {field_name} (Radio {slot})", icon
+    prefix = key.rsplit(".", 1)[0]
+    is_main = bool(flat.get(f"{prefix}.X_ZYXEL_MainSSID"))
+    profile = "Private WiFi" if is_main else "Guest WiFi"
+    band = str(flat.get(f"{prefix}.OperatingFrequencyBand", "")).strip()
+    if band:
+        return f"{profile} {band} {field_name} (Radio {slot})", icon
+    return f"{profile} {field_name} (Radio {slot})", icon
 
 
 # Define some known sensor types for proper configuration
@@ -701,7 +707,7 @@ class ConfiguredZyxelSensor(AbstractZyxelSensor):
         super().__init__(coordinator, entry, key)
         self._config = config
         self._is_uptime = key.split(".")[-1] in _UPTIME_LEAF_KEYS
-        self._attr_name = f"Zyxel {config['name']}{self._path_suffix(key)}"
+        self._attr_name = f"{config['name']}{self._path_suffix(key)}"
         self._attr_native_unit_of_measurement = None if self._is_uptime else config["unit"]
         self._attr_icon = config["icon"]
         self._attr_device_class = None if self._is_uptime else config["device_class"]
@@ -728,7 +734,7 @@ class GenericZyxelSensor(AbstractZyxelSensor):
     def name(self):
         """Return the name of the sensor."""
         name_parts = self._key.split(".")
-        return f"Zyxel {'.'.join(name_parts)}"
+        return ".".join(name_parts)
 
     @property
     def state(self):
@@ -750,8 +756,8 @@ class EX3301WiFiSensor(AbstractZyxelSensor):
 
     def __init__(self, coordinator, entry: ConfigEntry, key: str):
         super().__init__(coordinator, entry, key)
-        name, icon = _ex3301_wifi_label_for_key(key)
-        self._attr_name = f"Zyxel {name}"
+        name, icon = _ex3301_wifi_label_for_key(self._flat_state, key)
+        self._attr_name = name
         self._attr_icon = icon
 
     @property
