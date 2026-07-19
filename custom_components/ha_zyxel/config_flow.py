@@ -177,7 +177,7 @@ async def _validate_connection(hass: core.HomeAssistant, data):
 
             data[CONF_HOST] = host if device_type in {"nwa50ax", "ex3301_t0"} else candidate
             title = device_name or (
-                f"Zyxel {host}" if device_type in {"nwa50ax", "ex3301_t0"} else DEFAULT_NAME
+                host if device_type in {"nwa50ax", "ex3301_t0"} else DEFAULT_NAME
             )
             return {"title": title}
         except UpdateFailed as ex:
