@@ -424,9 +424,11 @@ class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
             or entry.data.get("host", "")
         )
         sw_version = leaf_vals.get("SoftwareVersion") or leaf_vals.get("FirmwareVersion")
+        host = str(entry.data.get("host", "")).replace("http://", "").replace("https://", "")
+        host = host.split("/", 1)[0]
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
-            name=f"Zyxel {model}",
+            name=f"Zyxel {host}" if host else f"Zyxel {model}",
             manufacturer="Zyxel",
             model=model,
             sw_version=sw_version,
