@@ -233,7 +233,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         elif device_type == "ex3301_t0":
             router = EX3301T0Client(host, username, password)
             await hass.async_add_executor_job(router.login)
-            await hass.async_add_executor_job(router.get_status)
         else:
             router = await hass.async_add_executor_job(
                 nr7101.NR7101, host, username, password, {"timeout": 15}
@@ -264,6 +263,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             if hasattr(router, "_session_valid"):
                 router._session_valid = False
             raise UpdateFailed("Router data fetch timed out")
+        except UpdateFailed as err:
+            # Re-login and retry once if the EX3301 session has expired.
+            if device_type == "ex3301_t0" and "session expired" in str(err).lower():
+                _LOGGER.info("EX3301-T0 session expired — re-logging in and retrying")
+                try:
+                    await hass.async_add_executor_job(router.login)
+                    return await hass.async_add_executor_job(router.get_status)
+                except Exception as relogin_err:
+                    raise UpdateFailed(f"EX3301-T0 re-login failed: {relogin_err}") from relogin_err
+            raise
         except Exception as err:
             if hasattr(router, "_session_valid"):
                 router._session_valid = False

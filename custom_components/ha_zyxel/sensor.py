@@ -345,8 +345,8 @@ async def async_setup_entry(
         return
 
     flat = _flatten_dict(coordinator.data)
-    # Always log all available keys so we can tune KNOWN_SENSORS mappings.
-    _LOGGER.warning(
+    # Log available keys at INFO level to help tune sensor mappings.
+    _LOGGER.info(
         "Zyxel (%s) available data keys (%d total): %s",
         device_type,
         len(flat),
@@ -412,11 +412,41 @@ class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
 class ConfiguredZyxelSensor(AbstractZyxelSensor):
     """Representation of a configured Zyxel sensor."""
 
+    # Human-readable labels for known array-parent names.
+    _PARENT_LABELS: dict[str, str] = {
+        "DslChannelInfo": "DSL Ch",
+        "WanLanInfo": "WAN",
+        "LanInfo": "LAN",
+        "LanPortInfo": "LAN Port",
+        "IPv4Address": "",
+        "Object": "",
+    }
+
+    @classmethod
+    def _path_suffix(cls, key: str) -> str:
+        """Return a disambiguating suffix for keys that appear at multiple array indices.
+
+        Scans the path right-to-left for the first numeric component that has a
+        named (non-numeric) parent, skipping the top-level 'Object.0' wrapper.
+        Example: 'DAL?oid=cardpage_status.Object.0.DslChannelInfo.1.DownstreamCurrRate'
+                 → ' (DSL Ch 1)'
+        """
+        parts = key.split(".")
+        for i in range(len(parts) - 2, 0, -1):
+            if parts[i].isdigit() and not parts[i - 1].isdigit():
+                parent = parts[i - 1]
+                if parent == "Object":
+                    continue  # Skip the outer Object.0 wrapper
+                prefix = cls._PARENT_LABELS.get(parent, parent)
+                label = f"{prefix} {parts[i]}".strip()
+                return f" ({label})" if label else ""
+        return ""
+
     def __init__(self, coordinator, entry: ConfigEntry, key: str, config: dict):
         """Initialize the sensor."""
         super().__init__(coordinator, entry, key)
         self._config = config
-        self._attr_name = f"Zyxel {config['name']}"
+        self._attr_name = f"Zyxel {config['name']}{self._path_suffix(key)}"
         self._attr_native_unit_of_measurement = config["unit"]
         self._attr_icon = config["icon"]
         self._attr_device_class = config["device_class"]
