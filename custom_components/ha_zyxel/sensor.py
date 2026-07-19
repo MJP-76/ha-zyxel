@@ -23,10 +23,40 @@ _LOGGER = logging.getLogger(__name__)
 _UPTIME_LEAF_KEYS = {"UpTime", "DSLUpTime", "ipoeConnectionUpTime", "pppoeConnectionUpTime"}
 _WLAN_HINT_TOKENS = ("wlan", "wifi", "wireless", "ssid", "channel", "radio", "band")
 _SENSITIVE_HINT_TOKENS = ("password", "passphrase", "psk", "wep", "key")
+_EX3301_WIFI_ALLOWED_LEAFS = {
+    "GuestSSIDEnable",
+    "oneSsidEnable",
+    "WiFiDriverVersion",
+    "AutoChannelEnable",
+    "Channel",
+    "Enable",
+    "IntfPath",
+    "MACAddress",
+    "ModeEnabled",
+    "OperatingChannelBandwidth",
+    "OperatingFrequencyBand",
+    "OperatingStandards",
+    "SSID",
+    "WPSEnable",
+    "X_ZYXEL_MainSSID",
+    "X_ZYXEL_Rate",
+    "band",
+    "bandwidth",
+    "BSSID",
+    "channel",
+    "downRate",
+    "encryp",
+    "extcha",
+    "Index",
+    "IsolationEnable",
+    "MainSSID",
+    "MaxAssociatedDevices",
+    "ModesSupported",
+}
 
 
 def _format_uptime_dms(value: Any) -> str | None:
-    """Format uptime seconds as <days>d <minutes>m <seconds>s."""
+    """Format uptime seconds as <days>d <hours>h <minutes>m <seconds>s."""
     try:
         total_seconds = int(float(value))
     except (TypeError, ValueError):
@@ -34,8 +64,9 @@ def _format_uptime_dms(value: Any) -> str | None:
     if total_seconds < 0:
         return None
     days, rem = divmod(total_seconds, 86400)
+    hours, rem = divmod(rem, 3600)
     minutes, seconds = divmod(rem, 60)
-    return f"{days}d {minutes}m {seconds}s"
+    return f"{days}d {hours}h {minutes}m {seconds}s"
 
 
 def _looks_like_wlan_path(key: str) -> bool:
@@ -46,6 +77,20 @@ def _looks_like_wlan_path(key: str) -> bool:
 def _is_sensitive_path(key: str) -> bool:
     lowered = key.lower()
     return any(token in lowered for token in _SENSITIVE_HINT_TOKENS)
+
+
+def _is_ex3301_wifi_sensor_key(key: str) -> bool:
+    """Return True for EX3301 WiFi telemetry keys we intentionally expose."""
+    leaf = key.split(".")[-1]
+    if leaf not in _EX3301_WIFI_ALLOWED_LEAFS:
+        return False
+    return (
+        ".WiFiInfo." in key
+        or key.startswith("DAL?oid=wlan.")
+        or key.endswith(".GuestSSIDEnable")
+        or key.endswith(".oneSsidEnable")
+        or key.endswith(".WiFiDriverVersion")
+    )
 
 
 # Define some known sensor types for proper configuration
@@ -473,6 +518,12 @@ async def async_setup_entry(
 
         if sensor_config:
             sensors.append(ConfiguredZyxelSensor(coordinator, entry, key, sensor_config))
+        elif (
+            device_type == "ex3301_t0"
+            and _is_ex3301_wifi_sensor_key(key)
+            and not _is_sensitive_path(key)
+        ):
+            sensors.append(GenericZyxelSensor(coordinator, entry, key))
         elif device_type != "ex3301_t0":
             # Generic sensors for legacy/NWA50AX — avoid flooding HA for EX3301
             # whose responses contain deeply-nested arrays with hundreds of fields.
