@@ -36,7 +36,40 @@ ZYXEL_ENTITY_PREFIXES = ("sensor.", "button.")
 ZYXEL_DASHBOARD_REFRESH_LISTENER = "_zyxel_dashboard_refresh_listener"
 
 
+_DASHBOARD_LOGO_URL = (
+    "https://raw.githubusercontent.com/MJP-76/ha-zyxel/main/resources/logo.png"
+)
+
+
 def _zyxel_dashboard_config(device_cards: list[dict[str, object]]) -> dict:
+    header_section: dict[str, object] = {
+        "type": "grid",
+        "column_span": 4,
+        "cards": [
+            {
+                "type": "picture",
+                "image": _DASHBOARD_LOGO_URL,
+                "alt_text": "Zyxel",
+                "style": "height:60px;object-fit:contain;background:transparent",
+            },
+            {
+                "type": "heading",
+                "heading": "Zyxel Devices",
+                "heading_style": "title",
+                "icon": "mdi:router",
+            },
+        ],
+    }
+    empty_section: dict[str, object] = {
+        "type": "grid",
+        "cards": [
+            {
+                "type": "markdown",
+                "content": "No Zyxel integrations are currently configured.\n\nGo to **Settings → Devices & Services** to add a device.",
+            }
+        ],
+    }
+    sections = [header_section, *(device_cards if device_cards else [empty_section])]
     return {
         "config": {
             "title": "Zyxel Devices",
@@ -44,12 +77,10 @@ def _zyxel_dashboard_config(device_cards: list[dict[str, object]]) -> dict:
                 {
                     "title": "Overview",
                     "path": ZyXEL_DASHBOARD_URL_PATH,
-                    "icon": "mdi:cloud",
+                    "icon": "mdi:router",
                     "theme": "Backend-selected",
                     "type": "sections",
-                    "sections": [
-                        *device_cards,
-                    ],
+                    "sections": sections,
                 }
             ],
         }
@@ -129,7 +160,7 @@ async def _ensure_zyxel_dashboard(hass: HomeAssistant, _entity_rows: list[str]) 
         require_admin=False,
         show_in_sidebar=True,
         sidebar_title="Zyxel Devices",
-        sidebar_icon="mdi:cloud",
+        sidebar_icon="mdi:router",
         config={"mode": "storage"},
         update=False,
     )
@@ -298,16 +329,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    if device_type == "nwa50ax":
-        if ZYXEL_DASHBOARD_REFRESH_LISTENER not in hass.data:
-            def _handle_entity_registry_update(event) -> None:
-                if event.data.get("action") in ("create", "remove"):
-                    _schedule_dashboard_refresh(hass)
+    # Register entity-registry listener (once, for all device types).
+    if ZYXEL_DASHBOARD_REFRESH_LISTENER not in hass.data:
+        def _handle_entity_registry_update(event) -> None:
+            if event.data.get("action") in ("create", "remove"):
+                _schedule_dashboard_refresh(hass)
 
-            hass.data[ZYXEL_DASHBOARD_REFRESH_LISTENER] = hass.bus.async_listen(
-                er.EVENT_ENTITY_REGISTRY_UPDATED, _handle_entity_registry_update
-            )
-        await _refresh_zyxel_dashboard(hass)
+        hass.data[ZYXEL_DASHBOARD_REFRESH_LISTENER] = hass.bus.async_listen(
+            er.EVENT_ENTITY_REGISTRY_UPDATED, _handle_entity_registry_update
+        )
+    await _refresh_zyxel_dashboard(hass)
 
     return True
 
@@ -324,10 +355,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id)
-        if not any(
-            data.get("device_type") == "nwa50ax"
-            for data in hass.data[DOMAIN].values()
-        ):
+        # Remove listener only when the last Zyxel entry is gone.
+        if not hass.data[DOMAIN]:
             remove_listener = hass.data.pop(ZYXEL_DASHBOARD_REFRESH_LISTENER, None)
             if remove_listener:
                 remove_listener()
