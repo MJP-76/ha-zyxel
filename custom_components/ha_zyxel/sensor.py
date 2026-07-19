@@ -26,32 +26,15 @@ _SENSITIVE_HINT_TOKENS = ("password", "passphrase", "psk", "wep", "key")
 _EX3301_WIFI_ALLOWED_LEAFS = {
     "GuestSSIDEnable",
     "oneSsidEnable",
-    "WiFiDriverVersion",
-    "AutoChannelEnable",
+    # WiFiInfo.<n> active-radio telemetry
     "Channel",
     "Enable",
-    "IntfPath",
-    "MACAddress",
-    "ModeEnabled",
-    "OperatingChannelBandwidth",
-    "OperatingFrequencyBand",
-    "OperatingStandards",
     "SSID",
-    "WPSEnable",
     "X_ZYXEL_MainSSID",
     "X_ZYXEL_Rate",
-    "band",
-    "bandwidth",
-    "BSSID",
-    "channel",
-    "downRate",
-    "encryp",
-    "extcha",
-    "Index",
-    "IsolationEnable",
-    "MainSSID",
-    "MaxAssociatedDevices",
-    "ModesSupported",
+    "OperatingFrequencyBand",
+    "OperatingChannelBandwidth",
+    "OperatingStandards",
 }
 
 
@@ -84,13 +67,16 @@ def _is_ex3301_wifi_sensor_key(key: str) -> bool:
     leaf = key.split(".")[-1]
     if leaf not in _EX3301_WIFI_ALLOWED_LEAFS:
         return False
-    return (
-        ".WiFiInfo." in key
-        or key.startswith("DAL?oid=wlan.")
-        or key.endswith(".GuestSSIDEnable")
-        or key.endswith(".oneSsidEnable")
-        or key.endswith(".WiFiDriverVersion")
-    )
+    return ".WiFiInfo." in key or key.endswith(".GuestSSIDEnable") or key.endswith(".oneSsidEnable")
+
+
+def _is_active_wifiinfo_path(flat: dict[str, Any], key: str) -> bool:
+    """Return True only for active WiFiInfo interfaces."""
+    if ".WiFiInfo." not in key:
+        return True
+    prefix = key.rsplit(".", 1)[0]
+    enabled = flat.get(f"{prefix}.Enable")
+    return bool(enabled)
 
 
 # Define some known sensor types for proper configuration
@@ -522,6 +508,8 @@ async def async_setup_entry(
             device_type == "ex3301_t0"
             and _is_ex3301_wifi_sensor_key(key)
             and not _is_sensitive_path(key)
+            and _is_active_wifiinfo_path(flat, key)
+            and str(value).strip().lower() != "unknown"
         ):
             sensors.append(GenericZyxelSensor(coordinator, entry, key))
         elif device_type != "ex3301_t0":
