@@ -244,10 +244,10 @@ class EX3301T0Client:
         "CardInfo",
     )
     # Endpoints that may live under cgi-bin/ on some firmware builds.
+    # lanhosts intentionally excluded — it creates one entry per client device.
     _CGI_ENDPOINTS = (
         "DAL?oid=cardpage_status",
         "DAL?oid=lan",
-        "DAL?oid=lanhosts",
     )
     # Validation succeeds if ANY of these return data.
     _CORE_ENDPOINTS = frozenset({

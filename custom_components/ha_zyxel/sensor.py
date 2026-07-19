@@ -257,27 +257,37 @@ async def async_setup_entry(
 ) -> None:
     """Set up the Zyxel sensors."""
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+    device_type = hass.data[DOMAIN][entry.entry_id].get("device_type", "legacy")
 
     if not coordinator.data:
         _LOGGER.warning("Zyxel coordinator has no data at sensor setup — no sensors created")
         return
 
     flat = _flatten_dict(coordinator.data)
-    _LOGGER.debug("Zyxel sensor setup: coordinator data keys = %s", list(flat.keys()))
+    # Always log all available keys so we can tune KNOWN_SENSORS mappings.
+    _LOGGER.info(
+        "Zyxel (%s) available data keys (%d total): %s",
+        device_type,
+        len(flat),
+        sorted(flat.keys()),
+    )
     sensors = []
 
     for key, value in flat.items():
         if not _is_value_scalar(value):
             continue
 
-        sensor_config = KNOWN_SENSORS.get(key.split(".")[-1], None)
+        leaf = key.split(".")[-1]
+        sensor_config = KNOWN_SENSORS.get(leaf)
 
         if sensor_config:
             sensors.append(ConfiguredZyxelSensor(coordinator, entry, key, sensor_config))
-        else:
+        elif device_type != "ex3301_t0":
+            # Generic sensors for legacy/NWA50AX — avoid flooding HA for EX3301
+            # whose responses contain deeply-nested arrays with hundreds of fields.
             sensors.append(GenericZyxelSensor(coordinator, entry, key))
 
-    _LOGGER.debug("Zyxel sensor setup: creating %d sensors", len(sensors))
+    _LOGGER.debug("Zyxel sensor setup: creating %d sensors for %s", len(sensors), device_type)
     if sensors:
         async_add_entities(sensors)
 
