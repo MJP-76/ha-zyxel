@@ -493,8 +493,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Register entity-registry listener (once, for all device types).
     if ZYXEL_DASHBOARD_REFRESH_LISTENER not in hass.data:
         def _handle_entity_registry_update(event) -> None:
-            if event.data.get("action") in ("create", "remove"):
-                _schedule_dashboard_refresh(hass)
+            action = event.data.get("action")
+            if action not in ("create", "remove", "update"):
+                return
+
+            entity_id = event.data.get("entity_id")
+            if entity_id and not entity_id.startswith(ZYXEL_ENTITY_PREFIXES):
+                return
+
+            # For update events, entity_id may be absent on some HA versions;
+            # refresh anyway because a disabled/enabled toggle affects visibility.
+            _schedule_dashboard_refresh(hass)
 
         hass.data[ZYXEL_DASHBOARD_REFRESH_LISTENER] = hass.bus.async_listen(
             er.EVENT_ENTITY_REGISTRY_UPDATED, _handle_entity_registry_update
