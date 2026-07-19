@@ -10,6 +10,17 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
+_LANGUAGE_LIKE_VALUES = {"english", "french", "francais", "german", "deutsch", "spanish", "espanol"}
+
+
+def _looks_like_ip(value: str) -> bool:
+    parts = value.split(".")
+    if len(parts) != 4:
+        return False
+    try:
+        return all(0 <= int(p) <= 255 for p in parts)
+    except ValueError:
+        return False
 
 
 def _button_device_model(entry: ConfigEntry, coordinator) -> tuple[str, str | None]:
@@ -48,6 +59,38 @@ def _button_device_model(entry: ConfigEntry, coordinator) -> tuple[str, str | No
     return model, sw_version
 
 
+def _button_system_name(coordinator) -> str | None:
+    data = coordinator.data if coordinator else None
+    if not data:
+        return None
+
+    def _search(d):
+        if isinstance(d, dict):
+            for k, v in d.items():
+                key_lower = str(k).lower()
+                if isinstance(v, str):
+                    candidate = v.strip()
+                    lowered = candidate.lower()
+                    if (
+                        candidate
+                        and not _looks_like_ip(candidate)
+                        and lowered not in _LANGUAGE_LIKE_VALUES
+                        and any(t in key_lower for t in ("system name", "system_name", "hostname", "fqdn", "device_name"))
+                    ):
+                        return candidate
+                found = _search(v)
+                if found:
+                    return found
+        elif isinstance(d, list):
+            for item in d:
+                found = _search(item)
+                if found:
+                    return found
+        return None
+
+    return _search(data)
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
@@ -65,11 +108,17 @@ class ZyxelRebootButton(ButtonEntity):
         self._router = router
         self._attr_unique_id = f"{entry.entry_id}_reboot"
         model, sw_version = _button_device_model(entry, coordinator)
+        device_type = str(entry.data.get("device_type", "")).lower().replace("-", "_")
         host = str(entry.data.get("host", "")).replace("http://", "").replace("https://", "")
         host = host.split("/", 1)[0]
+        display_name = f"Zyxel {host}" if host else f"Zyxel {model}"
+        if device_type == "nwa50ax":
+            nwa_name = _button_system_name(coordinator)
+            if nwa_name:
+                display_name = nwa_name
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
-            name=f"Zyxel {host}" if host else f"Zyxel {model}",
+            name=display_name,
             manufacturer="Zyxel",
             model=model,
             sw_version=sw_version,

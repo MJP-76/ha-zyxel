@@ -23,6 +23,7 @@ _LOGGER = logging.getLogger(__name__)
 _UPTIME_LEAF_KEYS = {"UpTime", "DSLUpTime", "ipoeConnectionUpTime", "pppoeConnectionUpTime"}
 _WLAN_HINT_TOKENS = ("wlan", "wifi", "wireless", "ssid", "channel", "radio", "band")
 _SENSITIVE_HINT_TOKENS = ("password", "passphrase", "psk", "wep", "key")
+_LANGUAGE_LIKE_VALUES = {"english", "french", "francais", "german", "deutsch", "spanish", "espanol"}
 _EX3301_WIFI_TOP_LEVEL_KEYS: set[str] = set()
 _EX3301_WIFIINFO_ALLOWED_LEAFS = {
     "SSID",
@@ -568,6 +569,35 @@ def _is_value_scalar(value: Any) -> bool:
     return isinstance(value, (str, int, float, bool)) or value is None
 
 
+def _looks_like_ip(value: str) -> bool:
+    parts = value.split(".")
+    if len(parts) != 4:
+        return False
+    try:
+        return all(0 <= int(p) <= 255 for p in parts)
+    except ValueError:
+        return False
+
+
+def _nwa_system_name(flat: dict[str, Any]) -> str | None:
+    preferred_tokens = ("system name", "system_name", "hostname", "fqdn", "device_name")
+    for key, value in flat.items():
+        if not isinstance(value, str):
+            continue
+        candidate = value.strip()
+        if not candidate:
+            continue
+        lowered = candidate.lower()
+        if lowered in _LANGUAGE_LIKE_VALUES:
+            continue
+        if _looks_like_ip(candidate):
+            continue
+        key_lower = key.lower()
+        if any(token in key_lower for token in preferred_tokens):
+            return candidate
+    return None
+
+
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
@@ -709,9 +739,15 @@ class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
         sw_version = leaf_vals.get("SoftwareVersion") or leaf_vals.get("FirmwareVersion")
         host = str(entry.data.get("host", "")).replace("http://", "").replace("https://", "")
         host = host.split("/", 1)[0]
+        device_type = str(entry.data.get("device_type", "")).lower().replace("-", "_")
+        display_name = f"Zyxel {host}" if host else f"Zyxel {model}"
+        if device_type == "nwa50ax":
+            nwa_name = _nwa_system_name(flat)
+            if nwa_name:
+                display_name = nwa_name
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
-            name=f"Zyxel {host}" if host else f"Zyxel {model}",
+            name=display_name,
             manufacturer="Zyxel",
             model=model,
             sw_version=sw_version,
