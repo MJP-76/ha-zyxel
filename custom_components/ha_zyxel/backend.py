@@ -338,13 +338,18 @@ class EX3301T0Client:
             }
         )
         self._session.verify = False
-        page = self._session.get(f"{self.host}/", timeout=self.timeout, allow_redirects=False)
-        _LOGGER.debug("EX3301-T0 login page status=%s url=%s", page.status_code, page.url)
-        if page.status_code in (301, 302, 303, 307, 308):
-            location = page.headers.get("Location", "")
-            _LOGGER.debug("EX3301-T0 login page redirected to %s", location)
-            if location.startswith("https://"):
-                raise UpdateFailed("EX3301-T0 redirected to HTTPS during login bootstrap")
+        try:
+            page = self._session.get(f"{self.host}/", timeout=self.timeout, allow_redirects=False)
+            _LOGGER.debug("EX3301-T0 login page status=%s url=%s", page.status_code, page.url)
+            if page.status_code in (301, 302, 303, 307, 308):
+                location = page.headers.get("Location", "")
+                _LOGGER.debug("EX3301-T0 login page redirected to %s", location)
+                if location.startswith("https://"):
+                    raise UpdateFailed("EX3301-T0 redirected to HTTPS during login bootstrap")
+        except requests.exceptions.ReadTimeout:
+            _LOGGER.debug("EX3301-T0 initial page fetch timed out; proceeding to RSA key fetch")
+        except requests.exceptions.RequestException as err:
+            _LOGGER.debug("EX3301-T0 initial page fetch failed (%s); proceeding to RSA key fetch", err)
 
         key_resp = self._session.get(
             f"{self.host}/getRSAPublickKey",
