@@ -108,14 +108,11 @@ class ZyxelRebootButton(ButtonEntity):
         self._router = router
         self._attr_unique_id = f"{entry.entry_id}_reboot"
         model, sw_version = _button_device_model(entry, coordinator)
-        device_type = str(entry.data.get("device_type", "")).lower().replace("-", "_")
         host = str(entry.data.get("host", "")).replace("http://", "").replace("https://", "")
         host = host.split("/", 1)[0]
-        display_name = f"Zyxel {host}" if host else f"Zyxel {model}"
-        if device_type == "nwa50ax":
-            nwa_name = _button_system_name(coordinator)
-            if nwa_name:
-                display_name = nwa_name
+        display_name = _button_system_name(coordinator) or (
+            f"Zyxel {host}" if host else f"Zyxel {model}"
+        )
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name=display_name,

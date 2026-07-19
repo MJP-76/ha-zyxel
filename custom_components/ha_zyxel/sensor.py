@@ -579,8 +579,9 @@ def _looks_like_ip(value: str) -> bool:
         return False
 
 
-def _nwa_system_name(flat: dict[str, Any]) -> str | None:
-    preferred_tokens = ("system name", "system_name", "hostname", "fqdn", "device_name")
+def _device_system_name(flat: dict[str, Any]) -> str | None:
+    """Return best host-readable system name for any Zyxel model."""
+    preferred_tokens = ("system name", "system_name", "systemname", "hostname", "fqdn", "device_name")
     for key, value in flat.items():
         if not isinstance(value, str):
             continue
@@ -591,6 +592,8 @@ def _nwa_system_name(flat: dict[str, Any]) -> str | None:
         if lowered in _LANGUAGE_LIKE_VALUES:
             continue
         if _looks_like_ip(candidate):
+            continue
+        if lowered.startswith(("http://", "https://")):
             continue
         key_lower = key.lower()
         if any(token in key_lower for token in preferred_tokens):
@@ -739,12 +742,7 @@ class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
         sw_version = leaf_vals.get("SoftwareVersion") or leaf_vals.get("FirmwareVersion")
         host = str(entry.data.get("host", "")).replace("http://", "").replace("https://", "")
         host = host.split("/", 1)[0]
-        device_type = str(entry.data.get("device_type", "")).lower().replace("-", "_")
-        display_name = f"Zyxel {host}" if host else f"Zyxel {model}"
-        if device_type == "nwa50ax":
-            nwa_name = _nwa_system_name(flat)
-            if nwa_name:
-                display_name = nwa_name
+        display_name = _device_system_name(flat) or (f"Zyxel {host}" if host else f"Zyxel {model}")
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name=display_name,
