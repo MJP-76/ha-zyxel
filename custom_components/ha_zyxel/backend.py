@@ -20,6 +20,18 @@ from homeassistant.helpers.update_coordinator import UpdateFailed
 _LOGGER = logging.getLogger(__name__)
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 _IP_LIKE_RE = re.compile(r"^\d{1,3}(?:\.\d{1,3}){3}$")
+_MODEL_LIKE_RE = re.compile(r"^[A-Z]{2,}\d[\w-]*$", re.IGNORECASE)
+_LANGUAGE_LIKE = {
+    "english",
+    "french",
+    "francais",
+    "german",
+    "deutsch",
+    "spanish",
+    "espanol",
+    "italian",
+    "portuguese",
+}
 
 
 class NWA50AXClient:
@@ -202,6 +214,8 @@ class NWA50AXClient:
                     return None
                 if _IP_LIKE_RE.match(candidate):
                     return None
+                if lowered in _LANGUAGE_LIKE:
+                    return None
                 return candidate
             if isinstance(node, Mapping):
                 for key, value in node.items():
@@ -209,7 +223,12 @@ class NWA50AXClient:
                     if any(token in key_lower for token in preferred):
                         if isinstance(value, str) and value.strip():
                             candidate = value.strip()
-                            if not _IP_LIKE_RE.match(candidate) and not candidate.lower().startswith(("http://", "https://")):
+                            lowered = candidate.lower()
+                            if (
+                                not _IP_LIKE_RE.match(candidate)
+                                and not lowered.startswith(("http://", "https://"))
+                                and lowered not in _LANGUAGE_LIKE
+                            ):
                                 return candidate
                     nested = _search(value, preferred)
                     if nested:
@@ -228,6 +247,38 @@ class NWA50AXClient:
         if name:
             return name
         return None
+
+    @staticmethod
+    def get_device_model(status: Mapping) -> str | None:
+        """Return a model-like identifier from zysh status data."""
+        def _search(node: Mapping | list | str | object) -> str | None:
+            if isinstance(node, str):
+                candidate = node.strip()
+                if not candidate:
+                    return None
+                lowered = candidate.lower()
+                if lowered in _LANGUAGE_LIKE or _IP_LIKE_RE.match(candidate):
+                    return None
+                return candidate if _MODEL_LIKE_RE.match(candidate) else None
+            if isinstance(node, Mapping):
+                for key, value in node.items():
+                    key_lower = key.lower() if isinstance(key, str) else ""
+                    if any(token in key_lower for token in ("model", "product", "platform", "hardware")):
+                        found = _search(value)
+                        if found:
+                            return found
+                for value in node.values():
+                    found = _search(value)
+                    if found:
+                        return found
+            if isinstance(node, list):
+                for item in node:
+                    found = _search(item)
+                    if found:
+                        return found
+            return None
+
+        return _search(status)
 
     def reboot(self) -> None:
         self._post_cmds(["reboot"])

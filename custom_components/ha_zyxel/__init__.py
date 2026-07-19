@@ -172,6 +172,8 @@ def _should_update_title_to_model(entry: ConfigEntry, model_title: str) -> bool:
         f"zyxel {device_type.upper()}".lower(),
         f"zyxel {host}:80",
         f"zyxel {host}:443",
+        "english",
+        "zyxel english",
     }
     return normalized_title in defaults and entry.title != model_title
 
