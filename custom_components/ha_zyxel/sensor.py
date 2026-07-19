@@ -23,18 +23,18 @@ _LOGGER = logging.getLogger(__name__)
 _UPTIME_LEAF_KEYS = {"UpTime", "DSLUpTime", "ipoeConnectionUpTime", "pppoeConnectionUpTime"}
 _WLAN_HINT_TOKENS = ("wlan", "wifi", "wireless", "ssid", "channel", "radio", "band")
 _SENSITIVE_HINT_TOKENS = ("password", "passphrase", "psk", "wep", "key")
-_EX3301_WIFI_ALLOWED_LEAFS = {
-    "GuestSSIDEnable",
-    "oneSsidEnable",
-    # WiFiInfo.<n> active-radio telemetry
-    "Channel",
-    "Enable",
+_EX3301_WIFI_TOP_LEVEL_KEYS = {
+    "DAL?oid=cardpage_status.Object.0.GuestSSIDEnable",
+    "DAL?oid=cardpage_status.Object.0.oneSsidEnable",
+}
+_EX3301_WIFIINFO_ALLOWED_LEAFS = {
     "SSID",
-    "X_ZYXEL_MainSSID",
-    "X_ZYXEL_Rate",
+    "Channel",
     "OperatingFrequencyBand",
     "OperatingChannelBandwidth",
     "OperatingStandards",
+    "X_ZYXEL_Rate",
+    "X_ZYXEL_MainSSID",
 }
 
 
@@ -63,11 +63,13 @@ def _is_sensitive_path(key: str) -> bool:
 
 
 def _is_ex3301_wifi_sensor_key(key: str) -> bool:
-    """Return True for EX3301 WiFi telemetry keys we intentionally expose."""
-    leaf = key.split(".")[-1]
-    if leaf not in _EX3301_WIFI_ALLOWED_LEAFS:
+    """Return True for EX3301 WiFi keys we intentionally expose."""
+    if key in _EX3301_WIFI_TOP_LEVEL_KEYS:
+        return True
+    if not key.startswith("DAL?oid=cardpage_status.") or ".WiFiInfo." not in key:
         return False
-    return ".WiFiInfo." in key or key.endswith(".GuestSSIDEnable") or key.endswith(".oneSsidEnable")
+    leaf = key.split(".")[-1]
+    return leaf in _EX3301_WIFIINFO_ALLOWED_LEAFS
 
 
 def _is_active_wifiinfo_path(flat: dict[str, Any], key: str) -> bool:
@@ -77,6 +79,42 @@ def _is_active_wifiinfo_path(flat: dict[str, Any], key: str) -> bool:
     prefix = key.rsplit(".", 1)[0]
     enabled = flat.get(f"{prefix}.Enable")
     return bool(enabled)
+
+
+def _ex3301_wifi_label_for_key(key: str) -> tuple[str, str]:
+    """Return (name, icon) for EX3301 WiFi key."""
+    if key.endswith(".GuestSSIDEnable"):
+        return "Guest WiFi Enabled", "mdi:wifi-lock-open"
+    if key.endswith(".oneSsidEnable"):
+        return "One SSID Mode Enabled", "mdi:wifi-sync"
+
+    leaf = key.split(".")[-1]
+    field_name = {
+        "SSID": "SSID",
+        "Channel": "Channel",
+        "OperatingFrequencyBand": "Frequency Band",
+        "OperatingChannelBandwidth": "Channel Bandwidth",
+        "OperatingStandards": "WiFi Standards",
+        "X_ZYXEL_Rate": "Link Rate",
+        "X_ZYXEL_MainSSID": "Main SSID",
+    }.get(leaf, leaf)
+    icon = {
+        "SSID": "mdi:wifi-settings",
+        "Channel": "mdi:access-point",
+        "OperatingFrequencyBand": "mdi:radio-tower",
+        "OperatingChannelBandwidth": "mdi:wifi-strength-3",
+        "OperatingStandards": "mdi:wifi",
+        "X_ZYXEL_Rate": "mdi:speedometer",
+        "X_ZYXEL_MainSSID": "mdi:wifi-check",
+    }.get(leaf, "mdi:wifi")
+
+    parts = key.split(".")
+    try:
+        i = parts.index("WiFiInfo")
+        slot = parts[i + 1]
+    except (ValueError, IndexError):
+        slot = "?"
+    return f"WiFi {field_name} (Radio {slot})", icon
 
 
 # Define some known sensor types for proper configuration
@@ -514,7 +552,7 @@ async def async_setup_entry(
             and _is_active_wifiinfo_path(flat, key)
             and str(value).strip().lower() != "unknown"
         ):
-            sensors.append(GenericZyxelSensor(coordinator, entry, key))
+            sensors.append(EX3301WiFiSensor(coordinator, entry, key))
         elif device_type != "ex3301_t0":
             # Generic sensors for legacy/NWA50AX — avoid flooding HA for EX3301
             # whose responses contain deeply-nested arrays with hundreds of fields.
@@ -705,3 +743,22 @@ class GenericZyxelSensor(AbstractZyxelSensor):
     def icon(self):
         """Return the icon."""
         return "mdi:router-wireless"
+
+
+class EX3301WiFiSensor(AbstractZyxelSensor):
+    """Friendly-named WiFi telemetry sensor for EX3301."""
+
+    def __init__(self, coordinator, entry: ConfigEntry, key: str):
+        super().__init__(coordinator, entry, key)
+        name, icon = _ex3301_wifi_label_for_key(key)
+        self._attr_name = f"Zyxel {name}"
+        self._attr_icon = icon
+
+    @property
+    def state(self):
+        """Return the state of the sensor, or None for empty strings."""
+        try:
+            value = self._get_value_from_path()
+            return value if value != "" else None
+        except (KeyError, AttributeError, TypeError, IndexError, ValueError):
+            return None
