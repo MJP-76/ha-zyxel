@@ -143,7 +143,9 @@ async def _validate_connection(hass: core.HomeAssistant, data):
                 status = await hass.async_add_executor_job(router.get_status)
                 if not status:
                     raise UpdateFailed("zysh-cgi returned an empty status payload")
+                device_model = await hass.async_add_executor_job(router.get_device_model, status)
                 device_name = await hass.async_add_executor_job(router.get_device_name, status)
+                device_name = device_model or device_name
             elif device_type == "ex3301_t0":
                 router = EX3301T0Client(candidate, data[CONF_USERNAME], data[CONF_PASSWORD])
                 await hass.async_add_executor_job(router.login)
