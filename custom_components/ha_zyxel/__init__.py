@@ -164,9 +164,15 @@ def _detected_model_from_data(entry: ConfigEntry, data: Mapping | None) -> str:
 
 def _should_update_title_to_model(entry: ConfigEntry, model_title: str) -> bool:
     normalized_title = _hostish_title(entry.title)
+    normalized_model = _hostish_title(model_title)
     host = _entry_host(entry).lower()
     device_type = str(entry.data.get(CONF_DEVICE_TYPE, "")).lower()
     defaults = {
+        host,
+        device_type,
+        device_type.upper().lower(),
+        f"{host}:80",
+        f"{host}:443",
         f"zyxel {host}",
         f"zyxel {device_type}",
         f"zyxel {device_type.upper()}".lower(),
@@ -174,7 +180,10 @@ def _should_update_title_to_model(entry: ConfigEntry, model_title: str) -> bool:
         f"zyxel {host}:443",
         "english",
         "zyxel english",
+        f"zyxel {normalized_model}",
     }
+    if entry.title.startswith("Zyxel "):
+        return entry.title.removeprefix("Zyxel ") != model_title
     return normalized_title in defaults and entry.title != model_title
 
 
@@ -448,9 +457,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await coordinator.async_config_entry_first_refresh()
 
     # Keep integration title/data aligned with detected model for existing
-    # host-based entries (e.g. "Zyxel 172.16.1.254" -> "Zyxel EX3301-T0").
+    # host-based entries (e.g. "Zyxel 172.16.1.254" -> "EX3301-T0").
     detected_model = _detected_model_from_data(entry, coordinator.data)
-    detected_title = f"Zyxel {detected_model}"
+    detected_title = detected_model
     updated_data = dict(entry.data)
     data_changed = updated_data.get("model") != detected_model
     if data_changed:
