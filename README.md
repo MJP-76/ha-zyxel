@@ -82,6 +82,15 @@ Note: the Mushroom card extension is required for the above code to work.
 
 If you want a cleaner Nebula-style overview, use `resources/nebula_dashboard.yml` as a starter Lovelace dashboard and adjust the entity IDs to match your device.
 
+## Roadmap: optional device control mode
+
+The integration is currently read-only by default (monitoring/telemetry).
+
+Planned future option:
+
+- Add an explicit opt-in **device control mode** for supported models (for example: WiFi toggles, reboot, and selected settings updates).
+- Keep read-only behavior as the default safety mode.
+
 ## Available entities
 
 In theory, all items listed [here](https://github.com/pkorpine/nr7101?tab=readme-ov-file#example-output) should be available as entities. The entities are generated dynamically, meaning they can vary from one device to another. They depend on what the device lets us see.
