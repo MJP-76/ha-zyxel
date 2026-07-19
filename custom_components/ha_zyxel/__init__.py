@@ -155,6 +155,8 @@ def _dashboard_device_cards(hass: HomeAssistant) -> list[dict[str, object]]:
             continue
         if not entity.entity_id.startswith(ZYXEL_ENTITY_PREFIXES):
             continue
+        if entity.disabled_by is not None:
+            continue
         if not entity.device_id:
             continue
         group = grouped.setdefault(
@@ -168,7 +170,11 @@ def _dashboard_device_cards(hass: HomeAssistant) -> list[dict[str, object]]:
     cards: list[dict[str, object]] = []
     for device_id in sorted(grouped):
         device = device_registry.devices.get(device_id)
+        if device and device.disabled_by is not None:
+            continue
         group = grouped[device_id]
+        if not group["entities"]:
+            continue
         heading = _device_title(device)
         config_entry_id = group.get("config_entry_id")
         if config_entry_id:
@@ -244,6 +250,8 @@ def _dashboard_entity_entries(hass: HomeAssistant) -> list[str]:
         if entity.platform != DOMAIN:
             continue
         if not entity.entity_id.startswith(ZYXEL_ENTITY_PREFIXES):
+            continue
+        if entity.disabled_by is not None:
             continue
         entries.append(entity.entity_id)
     return sorted(entries)
