@@ -410,14 +410,20 @@ class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
         safe_key = key.replace("?", "_").replace("=", "_").replace("&", "_").replace(" ", "_")
         self._attr_unique_id = f"{entry.entry_id}_{safe_key}"
         flat = self._flat_state
+        # flat has full-path keys; search by leaf name (first match wins).
+        leaf_vals: dict[str, Any] = {}
+        for k, v in flat.items():
+            leaf = k.split(".")[-1]
+            if leaf not in leaf_vals:
+                leaf_vals[leaf] = v
         model = (
-            flat.get("ModelName")
-            or flat.get("ProductClass")
-            or flat.get("HardwareVersion")
-            or entry.data.get("device_type", "").upper()
+            leaf_vals.get("ModelName")
+            or leaf_vals.get("ProductClass")
+            or leaf_vals.get("HardwareVersion")
+            or entry.data.get("device_type", "").upper().replace("_", "-")
             or entry.data.get("host", "")
         )
-        sw_version = flat.get("SoftwareVersion") or flat.get("FirmwareVersion")
+        sw_version = leaf_vals.get("SoftwareVersion") or leaf_vals.get("FirmwareVersion")
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name=f"Zyxel {model}",
