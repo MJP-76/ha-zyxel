@@ -154,6 +154,77 @@ KNOWN_SENSORS = {
         "device_class": SensorDeviceClass.DATA_SIZE,
         "state_class": SensorStateClass.TOTAL_INCREASING,
     },
+    # EX3301-T0 DSL router keys (from CardInfo / DAL?oid=cardpage_status)
+    "WAN_IP": {
+        "name": "WAN IP Address",
+        "unit": None,
+        "icon": "mdi:ip-network",
+        "device_class": None,
+        "state_class": None,
+    },
+    "WAN_Status": {
+        "name": "WAN Status",
+        "unit": None,
+        "icon": "mdi:wan",
+        "device_class": None,
+        "state_class": None,
+    },
+    "DSL_Speed_Down": {
+        "name": "DSL Downstream Sync Rate",
+        "unit": "kbit/s",
+        "icon": "mdi:download-network",
+        "device_class": None,
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    "DSL_Speed_Up": {
+        "name": "DSL Upstream Sync Rate",
+        "unit": "kbit/s",
+        "icon": "mdi:upload-network",
+        "device_class": None,
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    "DSL_DS_Actual_Rate": {
+        "name": "DSL Downstream Actual Rate",
+        "unit": "kbit/s",
+        "icon": "mdi:download-network",
+        "device_class": None,
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    "DSL_US_Actual_Rate": {
+        "name": "DSL Upstream Actual Rate",
+        "unit": "kbit/s",
+        "icon": "mdi:upload-network",
+        "device_class": None,
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    "FW_Version": {
+        "name": "Firmware Version",
+        "unit": None,
+        "icon": "mdi:information-outline",
+        "device_class": None,
+        "state_class": None,
+    },
+    "ConnectedDevices": {
+        "name": "Connected Devices",
+        "unit": None,
+        "icon": "mdi:devices",
+        "device_class": None,
+        "state_class": SensorStateClass.MEASUREMENT,
+    },
+    "loginAccount": {
+        "name": "Logged In Account",
+        "unit": None,
+        "icon": "mdi:account",
+        "device_class": None,
+        "state_class": None,
+    },
+    "loginLevel": {
+        "name": "Account Level",
+        "unit": None,
+        "icon": "mdi:account-key",
+        "device_class": None,
+        "state_class": None,
+    },
 }
 
 
@@ -188,40 +259,25 @@ async def async_setup_entry(
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
 
     if not coordinator.data:
+        _LOGGER.warning("Zyxel coordinator has no data at sensor setup — no sensors created")
         return
 
+    flat = _flatten_dict(coordinator.data)
+    _LOGGER.debug("Zyxel sensor setup: coordinator data keys = %s", list(flat.keys()))
     sensors = []
 
-    # Process all keys in the JSON and create sensors for them
-    # We'll use a flat structure for simplicity
-    for key, value in _flatten_dict(coordinator.data).items():
-        # Skip non-scalar values
+    for key, value in flat.items():
         if not _is_value_scalar(value):
             continue
 
-        # Check if this is a known sensor type
         sensor_config = KNOWN_SENSORS.get(key.split(".")[-1], None)
 
         if sensor_config:
-            # Create a configured sensor for known types
-            sensors.append(
-                ConfiguredZyxelSensor(
-                    coordinator,
-                    entry,
-                    key,
-                    sensor_config
-                )
-            )
+            sensors.append(ConfiguredZyxelSensor(coordinator, entry, key, sensor_config))
         else:
-            # Create a generic sensor for unknown types
-            sensors.append(
-                GenericZyxelSensor(
-                    coordinator,
-                    entry,
-                    key
-                )
-            )
+            sensors.append(GenericZyxelSensor(coordinator, entry, key))
 
+    _LOGGER.debug("Zyxel sensor setup: creating %d sensors", len(sensors))
     if sensors:
         async_add_entities(sensors)
 
@@ -234,7 +290,8 @@ class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._key = key
         self._flat_state: dict[str, Any] = {}
-        self._attr_unique_id = f"{entry.entry_id}_{key}"
+        safe_key = key.replace("?", "_").replace("=", "_").replace("&", "_").replace(" ", "_")
+        self._attr_unique_id = f"{entry.entry_id}_{safe_key}"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name=f"Zyxel ({entry.data['host']})",
