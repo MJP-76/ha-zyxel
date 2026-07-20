@@ -42,9 +42,10 @@ _DASHBOARD_LOGO_URL = (
 
 
 def _zyxel_dashboard_config(hass: HomeAssistant, device_cards: list[dict[str, object]]) -> dict:
+    # Sections in a 'sections'-type view must NOT have a 'type' key — they are
+    # plain section objects with optional 'title', 'column_span', and 'cards'.
     header_section: dict[str, object] = {
-        "type": "grid",
-        "title": "Overview",
+        "title": "Zyxel Devices",
         "column_span": 4,
         "cards": [
             {
@@ -62,7 +63,7 @@ def _zyxel_dashboard_config(hass: HomeAssistant, device_cards: list[dict[str, ob
         ],
     }
     empty_section: dict[str, object] = {
-        "type": "grid",
+        "title": "No devices",
         "cards": [
             {
                 "type": "markdown",
@@ -83,10 +84,11 @@ def _zyxel_dashboard_config(hass: HomeAssistant, device_cards: list[dict[str, ob
         }
     ]
     for section in _device_detail_sections(hass):
+        heading = section.get("title", "Device")
         views.append(
             {
-                "title": section["cards"][0]["heading"],
-                "path": str(section["cards"][0]["heading"]).lower().replace(" ", "-").replace("(", "").replace(")", ""),
+                "title": heading,
+                "path": heading.lower().replace(" ", "-").replace("(", "").replace(")", "").replace(".", "-"),
                 "icon": "mdi:access-point",
                 "theme": "Backend-selected",
                 "type": "sections",
@@ -266,7 +268,8 @@ def _dashboard_device_cards(hass: HomeAssistant) -> list[dict[str, object]]:
                     heading = f"{heading} ({host})"
         cards.append(
             {
-                "type": "grid",
+                "title": heading,
+                "column_span": 2,
                 "cards": [
                     {
                         "type": "heading",
@@ -315,7 +318,6 @@ def _device_detail_sections(hass: HomeAssistant) -> list[dict[str, object]]:
         )
         sections.append(
             {
-                "type": "grid",
                 "title": heading,
                 "column_span": 4,
                 "cards": [
