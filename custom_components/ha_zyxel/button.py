@@ -103,6 +103,8 @@ async def async_setup_entry(
 class ZyxelRebootButton(ButtonEntity):
     """Representation of a Zyxel reboot button."""
 
+    _attr_has_entity_name = True
+
     def __init__(self, entry: ConfigEntry, router, coordinator) -> None:
         """Initialize the button."""
         self._router = router

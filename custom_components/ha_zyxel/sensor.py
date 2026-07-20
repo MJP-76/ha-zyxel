@@ -714,6 +714,8 @@ async def async_setup_entry(
 class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
     """Base class for Zyxel device sensors."""
 
+    _attr_has_entity_name = True
+
     def __init__(self, coordinator, entry: ConfigEntry, key: str):
         """Initialize the sensor."""
         super().__init__(coordinator)
