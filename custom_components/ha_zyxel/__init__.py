@@ -7,6 +7,7 @@ from datetime import timedelta
 import async_timeout
 from homeassistant.components import frontend
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr, entity_registry as er
@@ -34,6 +35,7 @@ ZyXEL_DASHBOARDS_STORAGE_KEY = "lovelace_dashboards"
 ZyXEL_DASHBOARD_URL_PATH = "zyxel-devices"
 ZYXEL_ENTITY_PREFIXES = ("sensor.", "button.")
 ZYXEL_DASHBOARD_REFRESH_LISTENER = "_zyxel_dashboard_refresh_listener"
+ZYXEL_HA_STARTED_LISTENER = "_zyxel_ha_started_listener"
 
 
 _DASHBOARD_LOGO_URL = (
@@ -617,8 +619,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[ZYXEL_DASHBOARD_REFRESH_LISTENER] = hass.bus.async_listen(
             er.EVENT_ENTITY_REGISTRY_UPDATED, _handle_entity_registry_update
         )
-    await _refresh_zyxel_dashboard(hass)
-    _schedule_zyxel_dashboard_refresh_later(hass)
+
+    # Build the dashboard once all config entries have finished setup.
+    # - If HA is still starting up, wait for EVENT_HOMEASSISTANT_STARTED so
+    #   all devices have registered their entities before we write the dashboard.
+    # - If HA is already running (e.g. user adds a new device), refresh now.
+    if not hass.is_running:
+        if ZYXEL_HA_STARTED_LISTENER not in hass.data:
+            @callback
+            def _on_ha_started(event) -> None:
+                hass.data.pop(ZYXEL_HA_STARTED_LISTENER, None)
+                _schedule_zyxel_dashboard_refresh(hass)
+
+            hass.data[ZYXEL_HA_STARTED_LISTENER] = hass.bus.async_listen_once(
+                EVENT_HOMEASSISTANT_STARTED, _on_ha_started
+            )
+    else:
+        await _refresh_zyxel_dashboard(hass)
+        _schedule_zyxel_dashboard_refresh_later(hass)
 
     return True
 
