@@ -41,7 +41,7 @@ _DASHBOARD_LOGO_URL = (
 )
 
 
-def _zyxel_dashboard_config(device_cards: list[dict[str, object]]) -> dict:
+def _zyxel_dashboard_config(hass: HomeAssistant, device_cards: list[dict[str, object]]) -> dict:
     header_section: dict[str, object] = {
         "type": "grid",
         "column_span": 4,
@@ -69,20 +69,33 @@ def _zyxel_dashboard_config(device_cards: list[dict[str, object]]) -> dict:
             }
         ],
     }
-    sections = [header_section, *(device_cards if device_cards else [empty_section])]
+    overview_cards = device_cards if device_cards else [empty_section]
+    sections = [header_section, *overview_cards]
+    views = [
+        {
+            "title": "Overview",
+            "path": ZyXEL_DASHBOARD_URL_PATH,
+            "icon": "mdi:router",
+            "theme": "Backend-selected",
+            "type": "sections",
+            "sections": sections,
+        }
+    ]
+    for section in _device_detail_sections(hass):
+        views.append(
+            {
+                "title": section["cards"][0]["heading"],
+                "path": str(section["cards"][0]["heading"]).lower().replace(" ", "-").replace("(", "").replace(")", ""),
+                "icon": "mdi:access-point",
+                "theme": "Backend-selected",
+                "type": "sections",
+                "sections": [section],
+            }
+        )
     return {
         "config": {
             "title": "Zyxel Devices",
-            "views": [
-                {
-                    "title": "Overview",
-                    "path": ZyXEL_DASHBOARD_URL_PATH,
-                    "icon": "mdi:router",
-                    "theme": "Backend-selected",
-                    "type": "sections",
-                    "sections": sections,
-                }
-            ],
+            "views": views,
         }
     }
 
@@ -94,6 +107,32 @@ def _device_title(entry) -> str:
     if entry.name:
         return entry.name
     return "Zyxel Device"
+
+
+def _device_summary_entities(hass: HomeAssistant, device_id: str) -> list[str]:
+    entity_registry = er.async_get(hass)
+    summary_order = [
+        "host_name",
+        "ModelName",
+        "firmware_version",
+        "Internet",
+        "Ethernet",
+        "IP_Address",
+        "Nebula_Cloud_status",
+        "serial_number",
+        "mode",
+    ]
+    entities: list[str] = []
+    for leaf in summary_order:
+        for entity in entity_registry.entities.values():
+            if entity.platform != DOMAIN or entity.device_id != device_id:
+                continue
+            if entity.disabled_by is not None:
+                continue
+            if leaf.lower() in entity.entity_id.lower() or leaf.lower() in entity.original_name.lower():
+                entities.append(entity.entity_id)
+                break
+    return entities
 
 
 def _entry_host(entry: ConfigEntry) -> str:
@@ -244,6 +283,66 @@ def _dashboard_device_cards(hass: HomeAssistant) -> list[dict[str, object]]:
     return cards
 
 
+def _device_detail_sections(hass: HomeAssistant) -> list[dict[str, object]]:
+    entity_registry = er.async_get(hass)
+    device_registry = dr.async_get(hass)
+    sections: list[dict[str, object]] = []
+    for device_id in sorted({entity.device_id for entity in entity_registry.entities.values() if entity.platform == DOMAIN and entity.device_id}):
+        device = device_registry.devices.get(device_id)
+        if device and device.disabled_by is not None:
+            continue
+        heading = _device_title(device)
+        config_entry_id = next(
+            (
+                entity.config_entry_id
+                for entity in entity_registry.entities.values()
+                if entity.platform == DOMAIN and entity.device_id == device_id and entity.config_entry_id
+            ),
+            None,
+        )
+        if config_entry_id:
+            config_entry = hass.config_entries.async_get_entry(config_entry_id)
+            if config_entry:
+                host = _entry_host(config_entry)
+                if host:
+                    heading = f"{heading} ({host})"
+        summary_entities = _device_summary_entities(hass, device_id)
+        device_entities = sorted(
+            entity.entity_id
+            for entity in entity_registry.entities.values()
+            if entity.platform == DOMAIN and entity.device_id == device_id and entity.disabled_by is None
+        )
+        sections.append(
+            {
+                "type": "grid",
+                "column_span": 4,
+                "cards": [
+                    {
+                        "type": "heading",
+                        "heading": heading,
+                        "heading_style": "title",
+                        "icon": "mdi:access-point",
+                    },
+                    *(
+                        [
+                            {
+                                "type": "entities",
+                                "entities": summary_entities,
+                            }
+                        ]
+                        if summary_entities
+                        else []
+                    ),
+                    {
+                        "type": "entities",
+                        "entities": device_entities,
+                    },
+                ],
+            }
+        )
+    return sections
+
+
 async def _ensure_zyxel_dashboard(hass: HomeAssistant, _entity_rows: list[str]) -> None:
     """Create or refresh the shared Zyxel dashboard."""
     dashboards_store = Store[dict[str, object]](hass, 1, ZyXEL_DASHBOARDS_STORAGE_KEY)
@@ -264,7 +363,7 @@ async def _ensure_zyxel_dashboard(hass: HomeAssistant, _entity_rows: list[str]) 
         await dashboards_store.async_save(dashboards_data)
 
     dashboard_store = Store[dict[str, object]](hass, 1, ZyXEL_DASHBOARD_STORAGE_KEY)
-    await dashboard_store.async_save(_zyxel_dashboard_config(_dashboard_device_cards(hass)))
+    await dashboard_store.async_save(_zyxel_dashboard_config(hass, _dashboard_device_cards(hass)))
     # Use update=True so re-loading the integration doesn't raise ValueError
     # when the panel is already registered from a previous HA session.
     frontend.async_register_built_in_panel(
