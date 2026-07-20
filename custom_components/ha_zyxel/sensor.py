@@ -686,6 +686,22 @@ async def async_setup_entry(
             ]
         )
 
+    if device_type == "nwa50ax":
+        all_nwa_leafs = sorted(
+            {_normalize_leaf_name(k.split(".")[-1]) for k, v in flat.items() if _is_value_scalar(v) and not k.startswith("zyshdata")}
+        )
+        enabled_leafs = [l for l in all_nwa_leafs if l in _NWA50AX_DEFAULT_LEAFS]
+        disabled_leafs = [l for l in all_nwa_leafs if l not in _NWA50AX_DEFAULT_LEAFS]
+        _LOGGER.debug(
+            "NWA50AX (%s) leaf summary — total: %d, enabled-by-default: %d %s, disabled-by-default: %d %s",
+            entry.data.get("host", entry.entry_id),
+            len(all_nwa_leafs),
+            len(enabled_leafs),
+            enabled_leafs,
+            len(disabled_leafs),
+            disabled_leafs,
+        )
+
     for key, value in flat.items():
         if not _is_value_scalar(value):
             continue
