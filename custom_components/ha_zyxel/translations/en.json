@@ -8,7 +8,9 @@
       },
       "nwa50ax": {
         "data": {
+          "setup_mode": "Setup mode",
           "host": "IP Address",
+          "hosts": "IP Addresses (comma or newline separated)",
           "username": "Username (usually 'admin')",
           "password": "Password"
         }

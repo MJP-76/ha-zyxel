@@ -1,5 +1,6 @@
 """Config flow for Zyxel integration."""
 import logging
+import re
 
 import voluptuous as vol
 import requests
@@ -53,9 +54,18 @@ SELECT_SCHEMA = vol.Schema(
     }
 )
 
+NWA50AX_MODE_CHOICES = [
+    {"value": "single", "label": "Single device"},
+    {"value": "bulk", "label": "Multiple devices with shared credentials"},
+]
+
 NWA50AX_SCHEMA = vol.Schema(
     {
-        vol.Required(CONF_HOST): str,
+        vol.Required("setup_mode", default="single"): SelectSelector(
+            SelectSelectorConfig(options=NWA50AX_MODE_CHOICES, mode=SelectSelectorMode.LIST)
+        ),
+        vol.Optional(CONF_HOST): str,
+        vol.Optional("hosts"): str,
         vol.Required(CONF_USERNAME, default=DEFAULT_USERNAME): str,
         vol.Required(CONF_PASSWORD): str,
     }
@@ -125,6 +135,11 @@ def _try_candidates(host: str, device_type: str) -> list[str]:
     if host.startswith("http://") or host.startswith("https://"):
         return [host]
     return [f"http://{host}", f"https://{host}"]
+
+
+def _split_hosts(raw_hosts: str) -> list[str]:
+    hosts = [part.strip() for part in re.split(r"[\n,]+", raw_hosts or "") if part.strip()]
+    return list(dict.fromkeys(hosts))
 
 
 async def _validate_connection(hass: core.HomeAssistant, data):
@@ -213,22 +228,45 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_nwa50ax(self, user_input=None):
         errors = {}
         if user_input is not None:
-            data = {
-                CONF_DEVICE_TYPE: "nwa50ax",
-                CONF_HOST: user_input[CONF_HOST],
-                CONF_USERNAME: user_input[CONF_USERNAME],
-                CONF_PASSWORD: user_input[CONF_PASSWORD],
-            }
-            try:
-                info = await _validate_connection(self.hass, data)
-                self._validated_data = data
-                self._validated_info = info
-                return self.async_create_entry(title=info["title"], data=data)
-            except ConfigEntryAuthFailed:
-                errors["base"] = "invalid_auth"
-            except Exception:  # pylint: disable=broad-except
-                _LOGGER.exception("NWA50AX validation failed for %s", user_input[CONF_HOST])
+            mode = user_input["setup_mode"]
+            raw_hosts = user_input.get("hosts") if mode == "bulk" else user_input.get(CONF_HOST)
+            hosts = _split_hosts(raw_hosts or "")
+            if not hosts:
                 errors["base"] = "cannot_connect"
+            else:
+                first_data = {
+                    CONF_DEVICE_TYPE: "nwa50ax",
+                    CONF_HOST: hosts[0],
+                    CONF_USERNAME: user_input[CONF_USERNAME],
+                    CONF_PASSWORD: user_input[CONF_PASSWORD],
+                }
+                try:
+                    info = await _validate_connection(self.hass, first_data)
+                    self._validated_data = first_data
+                    self._validated_info = info
+                    await self.async_set_unique_id(first_data[CONF_HOST])
+                    self._abort_if_unique_id_configured()
+                    entry = self.async_create_entry(title=info["title"], data=first_data)
+                    if mode == "bulk":
+                        for host in hosts[1:]:
+                            self.hass.async_create_task(
+                                self.hass.config_entries.flow.async_init(
+                                    DOMAIN,
+                                    context={"source": "import"},
+                                    data={
+                                        CONF_DEVICE_TYPE: "nwa50ax",
+                                        CONF_HOST: host,
+                                        CONF_USERNAME: user_input[CONF_USERNAME],
+                                        CONF_PASSWORD: user_input[CONF_PASSWORD],
+                                    },
+                                )
+                            )
+                    return entry
+                except ConfigEntryAuthFailed:
+                    errors["base"] = "invalid_auth"
+                except Exception:  # pylint: disable=broad-except
+                    _LOGGER.exception("NWA50AX validation failed for %s", hosts[0])
+                    errors["base"] = "cannot_connect"
         return self.async_show_form(step_id="nwa50ax", data_schema=NWA50AX_SCHEMA, errors=errors)
 
     async def async_step_ex3301_t0(self, user_input=None):
@@ -277,6 +315,20 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     _LOGGER.exception("Legacy validation failed for %s", user_input[CONF_HOST])
                 errors["base"] = "cannot_connect"
         return self.async_show_form(step_id="legacy", data_schema=LEGACY_SCHEMA, errors=errors)
+
+    async def async_step_import(self, user_input=None):
+        if not user_input or user_input.get(CONF_DEVICE_TYPE) != "nwa50ax":
+            return self.async_abort(reason="not_supported")
+        try:
+            await self.async_set_unique_id(user_input[CONF_HOST])
+            self._abort_if_unique_id_configured()
+            info = await _validate_connection(self.hass, user_input)
+            return self.async_create_entry(title=info["title"], data=user_input)
+        except ConfigEntryAuthFailed:
+            return self.async_abort(reason="invalid_auth")
+        except Exception:  # pylint: disable=broad-except
+            _LOGGER.exception("NWA50AX import validation failed for %s", user_input.get(CONF_HOST))
+            return self.async_abort(reason="cannot_connect")
 
 
 class ConnectionError(exceptions.HomeAssistantError):
