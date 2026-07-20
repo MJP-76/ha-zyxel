@@ -1,5 +1,6 @@
 """Config flow for Zyxel integration."""
 import logging
+import re
 
 import voluptuous as vol
 import requests
@@ -127,6 +128,11 @@ def _try_candidates(host: str, device_type: str) -> list[str]:
     return [f"http://{host}", f"https://{host}"]
 
 
+def _split_hosts(raw_hosts: str) -> list[str]:
+    hosts = [part.strip() for part in re.split(r"[\n,]+", raw_hosts or "") if part.strip()]
+    return list(dict.fromkeys(hosts))
+
+
 async def _validate_connection(hass: core.HomeAssistant, data):
     device_type = data[CONF_DEVICE_TYPE]
     host = _normalize_host(data[CONF_HOST])
@@ -213,9 +219,13 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_nwa50ax(self, user_input=None):
         errors = {}
         if user_input is not None:
+            hosts = _split_hosts(user_input[CONF_HOST])
+            if not hosts:
+                errors["base"] = "cannot_connect"
+                return self.async_show_form(step_id="nwa50ax", data_schema=NWA50AX_SCHEMA, errors=errors)
             data = {
                 CONF_DEVICE_TYPE: "nwa50ax",
-                CONF_HOST: user_input[CONF_HOST],
+                CONF_HOST: hosts[0],
                 CONF_USERNAME: user_input[CONF_USERNAME],
                 CONF_PASSWORD: user_input[CONF_PASSWORD],
             }
@@ -223,11 +233,25 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 info = await _validate_connection(self.hass, data)
                 self._validated_data = data
                 self._validated_info = info
+                await self.async_set_unique_id(data[CONF_HOST])
+                self._abort_if_unique_id_configured()
+                if len(hosts) > 1:
+                    for host in hosts[1:]:
+                        await self.hass.config_entries.flow.async_init(
+                            DOMAIN,
+                            context={"source": "import"},
+                            data={
+                                CONF_DEVICE_TYPE: "nwa50ax",
+                                CONF_HOST: host,
+                                CONF_USERNAME: user_input[CONF_USERNAME],
+                                CONF_PASSWORD: user_input[CONF_PASSWORD],
+                            },
+                        )
                 return self.async_create_entry(title=info["title"], data=data)
             except ConfigEntryAuthFailed:
                 errors["base"] = "invalid_auth"
             except Exception:  # pylint: disable=broad-except
-                _LOGGER.exception("NWA50AX validation failed for %s", user_input[CONF_HOST])
+                _LOGGER.exception("NWA50AX validation failed for %s", hosts[0])
                 errors["base"] = "cannot_connect"
         return self.async_show_form(step_id="nwa50ax", data_schema=NWA50AX_SCHEMA, errors=errors)
 
@@ -277,6 +301,20 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     _LOGGER.exception("Legacy validation failed for %s", user_input[CONF_HOST])
                 errors["base"] = "cannot_connect"
         return self.async_show_form(step_id="legacy", data_schema=LEGACY_SCHEMA, errors=errors)
+
+    async def async_step_import(self, user_input=None):
+        if not user_input or user_input.get(CONF_DEVICE_TYPE) != "nwa50ax":
+            return self.async_abort(reason="not_supported")
+        try:
+            await self.async_set_unique_id(user_input[CONF_HOST])
+            self._abort_if_unique_id_configured()
+            info = await _validate_connection(self.hass, user_input)
+            return self.async_create_entry(title=info["title"], data=user_input)
+        except ConfigEntryAuthFailed:
+            return self.async_abort(reason="invalid_auth")
+        except Exception:  # pylint: disable=broad-except
+            _LOGGER.exception("NWA50AX import validation failed for %s", user_input.get(CONF_HOST))
+            return self.async_abort(reason="cannot_connect")
 
 
 class ConnectionError(exceptions.HomeAssistantError):

@@ -1,6 +1,6 @@
 # Handover — ha-zyxel EX3301-T0 / NWA50AX Integration
 
-**Branch:** `mjp-76-nwa50ax-integration`  
+**Branch:** `mjp-76-remove-device-prefix-entities`  
 **Fork:** `MJP-76/ha-zyxel`  
 **Upstream:** `zulufoxtrot/ha-zyxel`  
 **Last commit on `main`:** `d2caa9a` — Add HANDOVER.md for cross-device continuation  
@@ -25,6 +25,13 @@ Adds full EX3301-T0 support and improves NWA50AX support on top of the upstream 
 - [x] EX3301-T0 WiFi band-state sensors (Private/Guest × 2.4GHz/5GHz)
 - [x] EX3301-T0 auto-reload when WiFi radio layout changes
 - [x] NWA50AX zysh-cgi flow intact; title detection fixed (no longer shows "English")
+- [x] NWA50AX bulk setup supports comma/newline-separated IPs and creates one entry per host
+- [x] NWA50AX generic sensors are hidden by default to avoid exposing extra entities
+- [x] NWA50AX default-enabled allowlist added for the AP/status sensors from the supplied list
+- [x] NWA50AX everything else stays disabled, with `zyshdata*` removed from display
+- [x] NWA50AX MAC address entries are included by default
+- [x] NWA50AX skips noisy `zyshdata*` duplicate entities
+- [x] Legacy sensor defaults preserved; only the device picker changed on the legacy side
 - [x] Uptime sensors formatted as `d/h/m/s`
 - [x] Shared Zyxel dashboard — auto-created on first device add
 - [x] Dashboard refreshes on entity registry create/remove/update events
@@ -44,7 +51,7 @@ Adds full EX3301-T0 support and improves NWA50AX support on top of the upstream 
 | `custom_components/ha_zyxel/__init__.py` | Setup entry, coordinator, dashboard lifecycle, WiFi signature + auto-reload |
 | `custom_components/ha_zyxel/sensor.py` | KNOWN_SENSORS map, WiFi curation, section prefixes, default-enabled allowlist |
 | `custom_components/ha_zyxel/button.py` | Reboot button — system-name-first DeviceInfo naming |
-| `custom_components/ha_zyxel/config_flow.py` | Device-picker flow, NWA50AX model-title logic |
+| `custom_components/ha_zyxel/config_flow.py` | Device-picker flow, NWA50AX multi-host onboarding |
 
 ### Key line references
 
@@ -113,7 +120,7 @@ WAN 0 = LAN-side (172.16.x.x), WAN 1 = inactive slot, WAN 2 = active PPPoE (publ
 
 3. **NWA50AX device name showing IP** — System-name extraction is implemented. If the device still shows an IP after reload, check which zysh command returns the system hostname and expand `get_status()` (e.g. `show system info` or `show running-config`).
 
-4. **Upstream PR** — Draft PR body is embedded below. PR targets `zulufoxtrot/ha-zyxel` from `MJP-76/ha-zyxel:main`. Create with `gh pr create --repo zulufoxtrot/ha-zyxel --head MJP-76:main`.
+4. **Upstream PR** — Draft PR body is embedded below. PR targets `MJP-76/ha-zyxel` from the current feature branch.
 
 5. **Control mode** — Read-only by design. Roadmap for optional write/control mode is documented in `README.md`.
 
@@ -140,18 +147,16 @@ EX3301-T0 is at `http://172.16.1.254` — credentials are in the HA config entry
 
 ## Upstream PR — ready to open
 
-**Title:** Improve EX3301-T0 and NWA50AX support, add device-picker config flow, and stabilize Zyxel entities/dashboard
+**Title:** Improve EX3301-T0 and NWA50AX support, clean up entity names, and stabilize Zyxel onboarding/dashboard
 
 **Body:**
 
 ```
 ## Summary
-This PR introduces a device-picker-first config flow and strengthens model-specific
-support for EX3301-T0 and NWA50AX, while keeping the original legacy flow intact.
-Each model now has clearer onboarding, better validation behaviour, and cleaner entity output.
+This PR strengthens model-specific support for EX3301-T0 and NWA50AX while keeping
+the original legacy flow intact. It also cleans up entity naming and dashboard behavior.
 
 ## Config flow changes (shared + model-specific)
-- Added an initial device type picker in integration setup.
 - Kept the original legacy config path for existing generic-supported devices.
 - Added dedicated per-model setup/validation paths for NWA50AX and EX3301-T0.
 
@@ -179,8 +184,11 @@ Each model now has clearer onboarding, better validation behaviour, and cleaner 
 ## NWA50AX changes
 ### Connectivity/runtime
 - Preserved NWA50AX zysh-cgi behaviour and model-specific validation flow.
-- Kept AP-specific setup path intact under device picker.
+- Added multi-device onboarding from a single comma/newline-separated field.
+- Each address creates its own config entry using the same username/password.
 - Ensured host normalisation and correct AP client routing.
+- NWA50AX now exposes the supplied AP/status sensors by default and keeps the rest disabled.
+- NWA50AX ignores noisy `zyshdata*` duplicates in the generic entity set.
 
 ### Entity model
 - NWA50AX continues to expose AP-focused telemetry through dynamic status normalisation,
@@ -189,6 +197,8 @@ Each model now has clearer onboarding, better validation behaviour, and cleaner 
 
 ## Shared integration/dashboard improvements
 - Unified dashboard behaviour across device types.
+- Each config entry is isolated at the device level; EX3301, NWA50AX, and legacy devices
+  are tracked separately, not as one combined device.
 - Fixed panel re-registration conflict on reload.
 - Dashboard excludes disabled entities/devices.
 - Improved naming consistency (model-aware integration/group context, stable host/IP-based
@@ -215,6 +225,10 @@ Each model now has clearer onboarding, better validation behaviour, and cleaner 
 - Cleaner EX3301 entities (major noise reduction).
 - NWA50AX behaviour retained and aligned with shared logic.
 - More stable dashboard and entity lifecycle across reloads/upgrades.
+- Legacy device behaviour remains unchanged except for the initial device picker.
+
+## Attribution
+- This PR was coded with assistance from GitHub Copilot.
 ```
 
 **Command to open PR:**

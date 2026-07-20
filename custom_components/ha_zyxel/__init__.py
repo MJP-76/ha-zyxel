@@ -280,12 +280,6 @@ async def _ensure_zyxel_dashboard(hass: HomeAssistant, _entity_rows: list[str]) 
     )
 
 
-@callback
-def _schedule_dashboard_refresh(hass: HomeAssistant) -> None:
-    """Refresh the shared Zyxel dashboard asynchronously."""
-    hass.async_create_task(_refresh_zyxel_dashboard(hass))
-
-
 def _dashboard_entity_entries(hass: HomeAssistant) -> list[str]:
     registry = er.async_get(hass)
     entries: list[str] = []
@@ -441,6 +435,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     return await hass.async_add_executor_job(router.get_status)
                 except Exception as relogin_err:
                     raise UpdateFailed(f"EX3301-T0 re-login failed: {relogin_err}") from relogin_err
+            if device_type == "nwa50ax" and "login failed" in str(err).lower():
+                _LOGGER.info("NWA50AX login failed — re-logging in and retrying")
+                try:
+                    await hass.async_add_executor_job(router.login)
+                    return await hass.async_add_executor_job(router.get_status)
+                except Exception as relogin_err:
+                    raise UpdateFailed(f"NWA50AX re-login failed: {relogin_err}") from relogin_err
             raise
         except Exception as err:
             if hasattr(router, "_session_valid"):
@@ -499,7 +500,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
             # For update events, entity_id may be absent on some HA versions;
             # refresh anyway because a disabled/enabled toggle affects visibility.
-            _schedule_dashboard_refresh(hass)
+            hass.add_job(_refresh_zyxel_dashboard, hass)
 
         hass.data[ZYXEL_DASHBOARD_REFRESH_LISTENER] = hass.bus.async_listen(
             er.EVENT_ENTITY_REGISTRY_UPDATED, _handle_entity_registry_update

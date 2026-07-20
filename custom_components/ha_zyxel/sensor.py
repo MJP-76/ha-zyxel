@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -34,6 +35,98 @@ _EX3301_WIFIINFO_ALLOWED_LEAFS = {
     "X_ZYXEL_Rate",
     "X_ZYXEL_MainSSID",
 }
+
+_NWA50AX_DEFAULT_LEAFS = {
+    "active",
+    "band",
+    "builddate",
+    "currentlanguage",
+    "dnsserver",
+    "domainname",
+    "ethernet",
+    "firmwareversion",
+    "fqdn",
+    "from",
+    "gateway",
+    "hostname",
+    "idletime",
+    "internet",
+    "ipaddress",
+    "ipstatus",
+    "ipv6dhcp6",
+    "ipv6dhcp6addressrequest",
+    "ipv6enable",
+    "ipv6gateway",
+    "ipv6metric",
+    "ipv6slaac",
+    "ipv6staticaddress",
+    "leasetimeout",
+    "macaddress",
+    "mode",
+    "model",
+    "name",
+    "nebulaclaimreason",
+    "nebulaclaimstatus",
+    "nebulacloudreason",
+    "nebulacloudstatus",
+    "nebulantpreason",
+    "nebulantpstatus",
+    "no",
+    "proxyauthactive",
+    "proxyauthencryptedpassword",
+    "proxyauthusername",
+    "proxyport",
+    "proxyserver",
+    "reauthtimeout",
+    "serialnumber",
+    "service",
+    "sessiontime",
+    "slot0",
+    "slot1",
+    "slot2",
+    "slotactivate",
+    "slotchannelutilization",
+    "slotfcserrorcount",
+    "slotprofile",
+    "slotreceivedpktcount",
+    "slotretrycount",
+    "slotrole",
+    "slotslot1outputpower",
+    "slotslot2outputpower",
+    "slotssidprofile1",
+    "slotssidprofile1band",
+    "slotssidprofile2",
+    "slotssidprofile2band",
+    "slotssidprofile3",
+    "slotsidprofile3band",
+    "slotssidprofile4",
+    "slotsidprofile4band",
+    "slotssidprofile5",
+    "slotssidprofile5band",
+    "slotssidprofile6",
+    "slotssidprofile6band",
+    "slotssidprofile7",
+    "slotssidprofile7band",
+    "slotssidprofile8",
+    "slotssidprofile8band",
+    "slottransmittedpktcount",
+    "slottxpower",
+    "slotwdsdownlink",
+    "slotwdsprofile",
+    "slotwdsrole",
+    "slotwdsuplink",
+    "slotwdswirelessbridge",
+    "slotwlanreceivedbyte",
+    "slotwlantransmittedbyte",
+    "type",
+    "vlanid",
+    "vlantag",
+    "zyxelcloud",
+}
+
+
+def _normalize_leaf_name(value: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", value.strip().lower())
 
 
 def _format_uptime_dms(value: Any) -> str | None:
@@ -647,6 +740,9 @@ async def async_setup_entry(
         if not _is_value_scalar(value):
             continue
 
+        if device_type == "nwa50ax" and key.startswith("zyshdata"):
+            continue
+
         # For EX3301, skip API fields that return null — these are firmware stubs
         # (GPON temperature, WAN rate reporting, inactive DSL channels) that will
         # never have useful data and only add clutter to the entity list.
@@ -713,6 +809,8 @@ async def async_setup_entry(
 
 class AbstractZyxelSensor(CoordinatorEntity, SensorEntity):
     """Base class for Zyxel device sensors."""
+
+    _attr_has_entity_name = True
 
     def __init__(self, coordinator, entry: ConfigEntry, key: str):
         """Initialize the sensor."""
@@ -841,6 +939,13 @@ class ConfiguredZyxelSensor(AbstractZyxelSensor):
 
 class GenericZyxelSensor(AbstractZyxelSensor):
     """Representation of a generic Zyxel sensor."""
+
+    def __init__(self, coordinator, entry: ConfigEntry, key: str):
+        super().__init__(coordinator, entry, key)
+        device_type = str(entry.data.get("device_type", "")).lower().replace("-", "_")
+        if device_type == "nwa50ax":
+            leaf = _normalize_leaf_name(key.split(".")[-1])
+            self._attr_entity_registry_enabled_default = leaf in _NWA50AX_DEFAULT_LEAFS
 
     @property
     def name(self):
