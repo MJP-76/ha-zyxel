@@ -39,6 +39,7 @@ Adds full EX3301-T0 support and improves NWA50AX support on top of the upstream 
 - [x] Dashboard refreshes on entity registry create/remove/update events
 - [x] Dashboard does a delayed refresh so stale removed entities are pruned
 - [x] Dashboard uses a cloud-style overview plus per-device drill-down views
+- [x] Dashboard storage is rewritten on startup to force the current layout
 - [x] Entity names without "Zyxel" prefix (prefix lives in device/integration group)
 - [x] Integration group titles without "Zyxel" prefix (uses model/system name)
 - [x] Unified device naming: system-name-first, then host/IP fallback, all models

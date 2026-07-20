@@ -347,20 +347,18 @@ async def _ensure_zyxel_dashboard(hass: HomeAssistant, _entity_rows: list[str]) 
     """Create or refresh the shared Zyxel dashboard."""
     dashboards_store = Store[dict[str, object]](hass, 1, ZyXEL_DASHBOARDS_STORAGE_KEY)
     dashboards_data = await dashboards_store.async_load() or {"items": []}
-    items = dashboards_data.setdefault("items", [])
-    if not any(item.get("id") == ZyXEL_DASHBOARD_ID for item in items):
-        items.append(
-            {
-                "id": ZyXEL_DASHBOARD_ID,
-                "title": "Zyxel Devices",
-                "url_path": ZyXEL_DASHBOARD_URL_PATH,
-                "icon": "mdi:router",
-                "show_in_sidebar": True,
-                "require_admin": False,
-                "mode": "storage",
-            }
-        )
-        await dashboards_store.async_save(dashboards_data)
+    dashboards_data["items"] = [
+        {
+            "id": ZyXEL_DASHBOARD_ID,
+            "title": "Zyxel Devices",
+            "url_path": ZyXEL_DASHBOARD_URL_PATH,
+            "icon": "mdi:router",
+            "show_in_sidebar": True,
+            "require_admin": False,
+            "mode": "storage",
+        }
+    ]
+    await dashboards_store.async_save(dashboards_data)
 
     dashboard_store = Store[dict[str, object]](hass, 1, ZyXEL_DASHBOARD_STORAGE_KEY)
     await dashboard_store.async_save(_zyxel_dashboard_config(hass, _dashboard_device_cards(hass)))
