@@ -35,10 +35,10 @@ Adds full EX3301-T0 support and improves NWA50AX support on top of the upstream 
 - [x] Legacy Zyxel-prefixed entities are migrated away so new names take effect
 - [x] Uptime sensors formatted as `d/h/m/s`
 - [x] Shared Zyxel dashboard — auto-created on first device add
-- [x] Dashboard has an overview plus per-device drill-down views
+- [x] Cloud-style dashboard overview with per-device drill-down views
 - [x] Dashboard refreshes on entity registry create/remove/update events
 - [x] Dashboard does a delayed refresh so stale removed entities are pruned
-- [x] Dashboard uses per-device section headings with host/IP for uniqueness
+- [x] Dashboard uses a cloud-style overview plus per-device drill-down views
 - [x] Entity names without "Zyxel" prefix (prefix lives in device/integration group)
 - [x] Integration group titles without "Zyxel" prefix (uses model/system name)
 - [x] Unified device naming: system-name-first, then host/IP fallback, all models
@@ -204,6 +204,7 @@ the original legacy flow intact. It also cleans up entity naming and dashboard b
   are tracked separately, not as one combined device.
 - Fixed panel re-registration conflict on reload.
 - Dashboard excludes disabled entities/devices.
+- Dashboard uses a cloud-style overview with per-device drill-down views.
 - Improved naming consistency (model-aware integration/group context, stable host/IP-based
   device identity).
 
