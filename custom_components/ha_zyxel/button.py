@@ -7,6 +7,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers import entity_registry as er
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -97,6 +98,11 @@ async def async_setup_entry(
     """Set up the Zyxel buttons."""
     router = hass.data[DOMAIN][entry.entry_id]["router"]
     coordinator = hass.data[DOMAIN][entry.entry_id].get("coordinator")
+    ent_reg = er.async_get(hass)
+    for reg_entry in list(er.async_entries_for_config_entry(ent_reg, entry.entry_id)):
+        if reg_entry.entity_id.startswith("button.zyxel_"):
+            _LOGGER.debug("Removing legacy prefixed button for rename migration: %s", reg_entry.entity_id)
+            ent_reg.async_remove(reg_entry.entity_id)
     async_add_entities([ZyxelRebootButton(entry, router, coordinator)])
 
 

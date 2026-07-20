@@ -727,6 +727,13 @@ async def async_setup_entry(
             _LOGGER.debug("Removing stale entity %s", reg_entry.entity_id)
             ent_reg.async_remove(reg_entry.entity_id)
 
+    # Migration cleanup: force recreation of entities that were created with the
+    # old Zyxel-prefixed naming so the new device/entity names can take effect.
+    for reg_entry in config_entries:
+        if reg_entry.entity_id.startswith(("sensor.zyxel_", "button.zyxel_")):
+            _LOGGER.debug("Removing legacy prefixed entity for rename migration: %s", reg_entry.entity_id)
+            ent_reg.async_remove(reg_entry.entity_id)
+
     # Migration cleanup: purge legacy generic EX3301 entities created by older
     # builds for the same physical device under a different config_entry_id.
     # These have entity IDs like sensor.zyxel_dal_oid_... and are no longer used.

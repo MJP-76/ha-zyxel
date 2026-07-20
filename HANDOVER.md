@@ -32,6 +32,7 @@ Adds full EX3301-T0 support and improves NWA50AX support on top of the upstream 
 - [x] NWA50AX MAC address entries are included by default
 - [x] NWA50AX skips noisy `zyshdata*` duplicate entities
 - [x] Legacy sensor defaults preserved; only the device picker changed on the legacy side
+- [x] Legacy Zyxel-prefixed entities are migrated away so new names take effect
 - [x] Uptime sensors formatted as `d/h/m/s`
 - [x] Shared Zyxel dashboard — auto-created on first device add
 - [x] Dashboard refreshes on entity registry create/remove/update events
