@@ -44,6 +44,7 @@ _DASHBOARD_LOGO_URL = (
 def _zyxel_dashboard_config(hass: HomeAssistant, device_cards: list[dict[str, object]]) -> dict:
     header_section: dict[str, object] = {
         "type": "grid",
+        "title": "Overview",
         "column_span": 4,
         "cards": [
             {
@@ -315,6 +316,7 @@ def _device_detail_sections(hass: HomeAssistant) -> list[dict[str, object]]:
         sections.append(
             {
                 "type": "grid",
+                "title": heading,
                 "column_span": 4,
                 "cards": [
                     {
