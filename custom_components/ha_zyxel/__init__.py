@@ -299,6 +299,17 @@ async def _refresh_zyxel_dashboard(hass: HomeAssistant) -> None:
     await _ensure_zyxel_dashboard(hass, _dashboard_entity_entries(hass))
 
 
+@callback
+def _schedule_zyxel_dashboard_refresh(hass: HomeAssistant) -> None:
+    """Schedule a dashboard refresh on the event loop."""
+    hass.async_create_task(_refresh_zyxel_dashboard(hass))
+
+
+def _schedule_zyxel_dashboard_refresh_later(hass: HomeAssistant) -> None:
+    """Refresh again after the registry settles."""
+    hass.loop.call_later(1.0, _schedule_zyxel_dashboard_refresh, hass)
+
+
 def _flatten_value(value, parent_key: str = "") -> dict:
     items = {}
     if isinstance(value, Mapping):
@@ -500,12 +511,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
             # For update events, entity_id may be absent on some HA versions;
             # refresh anyway because a disabled/enabled toggle affects visibility.
-            hass.add_job(_refresh_zyxel_dashboard, hass)
+            hass.add_job(_schedule_zyxel_dashboard_refresh, hass)
 
         hass.data[ZYXEL_DASHBOARD_REFRESH_LISTENER] = hass.bus.async_listen(
             er.EVENT_ENTITY_REGISTRY_UPDATED, _handle_entity_registry_update
         )
     await _refresh_zyxel_dashboard(hass)
+    _schedule_zyxel_dashboard_refresh_later(hass)
 
     return True
 
@@ -528,5 +540,6 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             if remove_listener:
                 remove_listener()
         await _refresh_zyxel_dashboard(hass)
+        _schedule_zyxel_dashboard_refresh_later(hass)
 
     return unload_ok

@@ -36,6 +36,7 @@ Adds full EX3301-T0 support and improves NWA50AX support on top of the upstream 
 - [x] Uptime sensors formatted as `d/h/m/s`
 - [x] Shared Zyxel dashboard — auto-created on first device add
 - [x] Dashboard refreshes on entity registry create/remove/update events
+- [x] Dashboard does a delayed refresh so stale removed entities are pruned
 - [x] Dashboard uses per-device section headings with host/IP for uniqueness
 - [x] Entity names without "Zyxel" prefix (prefix lives in device/integration group)
 - [x] Integration group titles without "Zyxel" prefix (uses model/system name)
