@@ -1,5 +1,3 @@
-> **MIGRATED** - This repository has been consolidated into [MJP-76/ha-addons](https://github.com/MJP-76/ha-addons). All future updates will be in that repo. Please migrate to the new repository.
-
 # ha-zyxel
 
 <img src="https://raw.githubusercontent.com/zulufoxtrot/ha-zyxel/refs/heads/main/resources/logo.png" alt="Zyxel Logo" width="128"/>
