@@ -10,7 +10,7 @@
 
 ## What this branch does
 
-Adds full EX3301-T0 support and improves NWA50AX support on top of the upstream `ha-zyxel` integration. Introduces a shared Zyxel dashboard, curated entity model, and consistent naming across all device types. Legacy router support is untouched.
+Adds full EX3301-T0 support and improves NWA50AX support on top of the upstream `ha-zyxel` integration. Introduces a curated entity model and consistent naming across all device types. Legacy router support is untouched.
 
 ---
 
@@ -34,13 +34,6 @@ Adds full EX3301-T0 support and improves NWA50AX support on top of the upstream 
 - [x] Legacy sensor defaults preserved; only the device picker changed on the legacy side
 - [x] Legacy Zyxel-prefixed entities are migrated away so new names take effect
 - [x] Uptime sensors formatted as `d/h/m/s`
-- [x] Shared Zyxel dashboard — auto-created on first device add
-- [x] Cloud-style dashboard overview with per-device drill-down views
-- [x] Dashboard refreshes on entity registry create/remove/update events
-- [x] Dashboard does a delayed refresh so stale removed entities are pruned
-- [x] Dashboard uses a cloud-style overview plus per-device drill-down views
-- [x] Dashboard storage is rewritten on startup to force the current layout
-- [x] Dashboard sections have explicit titles so HA doesn't render "new section"
 - [x] Entity names without "Zyxel" prefix (prefix lives in device/integration group)
 - [x] Integration group titles without "Zyxel" prefix (uses model/system name)
 - [x] Unified device naming: system-name-first, then host/IP fallback, all models
@@ -53,7 +46,7 @@ Adds full EX3301-T0 support and improves NWA50AX support on top of the upstream 
 | File | What changed / what it does |
 |---|---|
 | `custom_components/ha_zyxel/backend.py` | EX3301 login/crypto/probe; NWA50AX `get_device_model()` + language-filter fix |
-| `custom_components/ha_zyxel/__init__.py` | Setup entry, coordinator, dashboard lifecycle, WiFi signature + auto-reload |
+| `custom_components/ha_zyxel/__init__.py` | Setup entry, coordinator, WiFi signature + auto-reload |
 | `custom_components/ha_zyxel/sensor.py` | KNOWN_SENSORS map, WiFi curation, section prefixes, default-enabled allowlist |
 | `custom_components/ha_zyxel/button.py` | Reboot button — system-name-first DeviceInfo naming |
 | `custom_components/ha_zyxel/config_flow.py` | Device-picker flow, NWA50AX multi-host onboarding |
@@ -65,8 +58,6 @@ Adds full EX3301-T0 support and improves NWA50AX support on top of the upstream 
 | `_normalize_device_type()` | `__init__.py` | 110 |
 | `_ex3601_wifi_signature()` | `__init__.py` | 130 |
 | `async_setup_entry` | `__init__.py` | 328 |
-| `_dashboard_device_cards()` | `__init__.py` | 190 |
-| `_handle_entity_registry_update` | `__init__.py` | 480 |
 | `EX3301T0Client` | `backend.py` | 236 |
 | `_encrypt_login_payload()` | `backend.py` | 290 |
 | `NWA50AXClient.get_device_model()` | `backend.py` | 232 |
@@ -113,7 +104,6 @@ WAN 0 = LAN-side (172.16.x.x), WAN 1 = inactive slot, WAN 2 = active PPPoE (publ
 - **Encrypted API responses:** After login, all CGI endpoints return `{"content":"<b64>","iv":"<b64>"}` — decrypt with session AES key.
 - **No `/cgi-bin/` prefix on EX3301.** All endpoints work at root (`/CardInfo`, `/DAL?oid=...`). Using `/cgi-bin/` causes timeout.
 - **`available` property:** HA checks `available` before `state`. `_flat_state` must be pre-populated in `__init__` from `coordinator.data`; do not rely solely on the update callback.
-- **Dashboard panel re-registration:** `frontend.async_register_built_in_panel()` raises `ValueError` if panel already registered. Guard with `update=True` or try/except.
 
 ---
 
@@ -121,13 +111,11 @@ WAN 0 = LAN-side (172.16.x.x), WAN 1 = inactive slot, WAN 2 = active PPPoE (publ
 
 1. **EX3301 WiFi telemetry entities** — Active-radio WiFi sensors (SSID, channel, link rate) are curated and filter-ready but the `DAL?oid=wlan` probe needs live verification. After reload check HA logs for `WLAN-related data keys` INFO entries to confirm returned keys.
 
-2. **Dashboard dynamic update** — Entity registry `update` events now trigger a refresh. If sections still don't update after an HA restart, check whether `_schedule_dashboard_refresh` is firing (add a debug log in `_handle_entity_registry_update`).
+2. **NWA50AX device name showing IP** — System-name extraction is implemented. If the device still shows an IP after reload, check which zysh command returns the system hostname and expand `get_status()` (e.g. `show system info` or `show running-config`).
 
-3. **NWA50AX device name showing IP** — System-name extraction is implemented. If the device still shows an IP after reload, check which zysh command returns the system hostname and expand `get_status()` (e.g. `show system info` or `show running-config`).
+3. **Upstream PR** — Draft PR body is embedded below. PR targets `MJP-76/ha-zyxel` from the current feature branch.
 
-4. **Upstream PR** — Draft PR body is embedded below. PR targets `MJP-76/ha-zyxel` from the current feature branch.
-
-5. **Control mode** — Read-only by design. Roadmap for optional write/control mode is documented in `README.md`.
+4. **Control mode** — Read-only by design. Roadmap for optional write/control mode is documented in `README.md`.
 
 ---
 
@@ -152,14 +140,14 @@ EX3301-T0 is at `http://172.16.1.254` — credentials are in the HA config entry
 
 ## Upstream PR — ready to open
 
-**Title:** Improve EX3301-T0 and NWA50AX support, clean up entity names, and stabilize Zyxel onboarding/dashboard
+**Title:** Improve EX3301-T0 and NWA50AX support, clean up entity names, and stabilize Zyxel onboarding
 
 **Body:**
 
 ```
 ## Summary
 This PR strengthens model-specific support for EX3301-T0 and NWA50AX while keeping
-the original legacy flow intact. It also cleans up entity naming and dashboard behavior.
+the original legacy flow intact. It also cleans up entity naming.
 
 ## Config flow changes (shared + model-specific)
 - Kept the original legacy config path for existing generic-supported devices.
@@ -200,13 +188,9 @@ the original legacy flow intact. It also cleans up entity naming and dashboard b
   including WLAN/radio status, channel/wireless-hal derived state, Nebula status surfaces,
   and device identity/status fields.
 
-## Shared integration/dashboard improvements
-- Unified dashboard behaviour across device types.
+## Shared improvements
 - Each config entry is isolated at the device level; EX3301, NWA50AX, and legacy devices
   are tracked separately, not as one combined device.
-- Fixed panel re-registration conflict on reload.
-- Dashboard excludes disabled entities/devices.
-- Dashboard uses a cloud-style overview with per-device drill-down views.
 - Improved naming consistency (model-aware integration/group context, stable host/IP-based
   device identity).
 
@@ -216,7 +200,6 @@ the original legacy flow intact. It also cleans up entity naming and dashboard b
   model/system-name values.
 - Unified device naming policy across all models: system-name-first with host/model fallback,
   applied consistently in sensor and button platforms.
-- Dashboard grouping uses per-device sections with host/IP suffix for uniqueness.
 - Removed duplicate EX3301 `Hardware Version` sensor.
 - Added EX3301 default-enabled allowlist so only essential Core/Network/Uptime/WiFi state
   sensors are enabled by default.
@@ -230,7 +213,7 @@ the original legacy flow intact. It also cleans up entity naming and dashboard b
 - Clear setup: pick device type first, then model-specific flow.
 - Cleaner EX3301 entities (major noise reduction).
 - NWA50AX behaviour retained and aligned with shared logic.
-- More stable dashboard and entity lifecycle across reloads/upgrades.
+- Stable entity lifecycle across reloads/upgrades.
 - Legacy device behaviour remains unchanged except for the initial device picker.
 
 ## Attribution
@@ -242,6 +225,6 @@ the original legacy flow intact. It also cleans up entity naming and dashboard b
 gh pr create \
   --repo zulufoxtrot/ha-zyxel \
   --head MJP-76:main \
-  --title "Improve EX3301-T0 and NWA50AX support, add device-picker config flow, and stabilize Zyxel entities/dashboard" \
+  --title "Improve EX3301-T0 and NWA50AX support, add device-picker config flow, and stabilize Zyxel entities" \
   --body-file /tmp/pr-body.txt
 ```

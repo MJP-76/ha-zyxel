@@ -8,9 +8,12 @@
 
 __Home Assistant integration for Zyxel devices__
 
-<img src="https://raw.githubusercontent.com/zulufoxtrot/ha-zyxel/refs/heads/main/resources/screenshot.png" alt="Zyxel Logo" />
-
 [![Open ha-zyxel on Home Assistant Community Store (HACS)](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=zulufoxtrot&repository=ha-zyxel&category=integration)
+[![Docs](https://img.shields.io/badge/Docs-MkDocs-41BDF5?style=flat&logo=materialdesignicons&logoColor=white)](https://MJP-76.github.io/ha-zyxel/)
+
+## Documentation
+
+Full documentation is available at [MJP-76.github.io/ha-zyxel](https://MJP-76.github.io/ha-zyxel/). It covers installation, adding a device, available entities, and the roadmap.
 
 ## Supported devices
 
@@ -69,18 +72,6 @@ Prerequisites:
 7. Click Submit.
 
 If connection fails, try with `http://` instead of `https://`.
-
-## Adding cards to your dashboard
-
-Add [this code](resources/card_example.yml) to your dashboard to add the cards pictured above. Follow the instructions from the animation below.
-
-Note: the Mushroom card extension is required for the above code to work.
-
-![](resources/import_demo.gif)
-
-## Nebula-style dashboard starter
-
-If you want a cleaner Nebula-style overview, use `resources/nebula_dashboard.yml` as a starter Lovelace dashboard and adjust the entity IDs to match your device.
 
 ## Roadmap: optional device control mode
 
